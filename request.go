@@ -1,6 +1,10 @@
 package estellm
 
-import "github.com/mashiike/estellm/metadata"
+import (
+	"encoding/json"
+
+	"github.com/mashiike/estellm/metadata"
+)
 
 type Request struct {
 	Name            string               `json:"name"`
@@ -30,9 +34,16 @@ func (r *Request) Clone() *Request {
 }
 
 func (r *Request) TemplateData() map[string]any {
+	payload := r.Payload
+	if bs, err := json.Marshal(r.Payload); err == nil {
+		var tmp any
+		if err := json.Unmarshal(bs, &tmp); err == nil {
+			payload = tmp
+		}
+	}
 	return map[string]any{
 		"name":             r.Name,
-		"payload":          r.Payload,
+		"payload":          payload,
 		"metadata":         r.Metadata,
 		"previous_results": r.PreviousResults,
 		"include_deps":     r.IncludeDeps,
