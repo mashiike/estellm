@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"os"
 	"slices"
@@ -33,6 +34,7 @@ type AgentMux struct {
 	dependents map[string][]string
 	isCycle    bool
 	validate   func() error
+	logger     *slog.Logger
 }
 
 type newAgentMuxOptions struct {
@@ -43,6 +45,7 @@ type newAgentMuxOptions struct {
 	extVars         map[string]string
 	nativeFunctions []*jsonnet.NativeFunction
 	templateFuncs   template.FuncMap
+	logger          *slog.Logger
 }
 
 type NewAgentMuxOption func(*newAgentMuxOptions)
@@ -83,6 +86,12 @@ func WithTemplateFuncs(fmap template.FuncMap) NewAgentMuxOption {
 	}
 }
 
+func WithLogger(logger *slog.Logger) NewAgentMuxOption {
+	return func(o *newAgentMuxOptions) {
+		o.logger = logger
+	}
+}
+
 func WithNativeFunctions(functions ...*jsonnet.NativeFunction) NewAgentMuxOption {
 	return func(o *newAgentMuxOptions) {
 		o.nativeFunctions = append(o.nativeFunctions, functions...)
@@ -104,6 +113,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		extVars:         map[string]string{},
 		nativeFunctions: []*jsonnet.NativeFunction{},
 		templateFuncs:   template.FuncMap{},
+		logger:          slog.Default(),
 	}
 	for _, fn := range optFns {
 		fn(&o)
@@ -134,6 +144,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		prompts:    prompts,
 		agents:     agents,
 		dependents: dependents,
+		logger:     o.logger,
 	}
 	mux.validate = sync.OnceValue(mux.validateImpl)
 	return mux, nil

@@ -1,9 +1,11 @@
 package estellm
 
+import "github.com/mashiike/estellm/metadata"
+
 type Request struct {
 	Name            string               `json:"name"`
 	Payload         any                  `json:"payload"`
-	Metadata        Metadata             `json:"metadata"`
+	Metadata        metadata.Metadata    `json:"metadata"`
 	PreviousResults map[string]*Response `json:"previous_results,omitempty"`
 	IncludeDeps     bool                 `json:"include_deps,omitempty"`
 }
@@ -12,7 +14,7 @@ func NewRequest(name string, payload any) (*Request, error) {
 	return &Request{
 		Name:     name,
 		Payload:  payload,
-		Metadata: make(Metadata),
+		Metadata: make(metadata.Metadata),
 	}, nil
 }
 

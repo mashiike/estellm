@@ -1,8 +1,15 @@
 package estellm
 
+import "errors"
+
 const (
 	RoleUser      = "user"
 	RoleAssistant = "assistant"
+)
+
+var (
+	ErrInvalidMessageRole    = errors.New("invalid message role")
+	ErrInvalidMessageContent = errors.New("invalid message content")
 )
 
 type Message struct {
@@ -11,8 +18,9 @@ type Message struct {
 }
 
 const (
-	PartTypeText   = "text"
-	PartTypeBinary = "binary"
+	PartTypeText      = "text"
+	PartTypeBinary    = "binary"
+	PartTypeReasoning = "reasoning"
 )
 
 type ContentPart struct {
@@ -24,6 +32,10 @@ type ContentPart struct {
 
 func TextPart(text string) ContentPart {
 	return ContentPart{Type: PartTypeText, Text: text}
+}
+
+func ReasoningPart(text string) ContentPart {
+	return ContentPart{Type: PartTypeReasoning, Text: text}
 }
 
 func BinaryPart(mimeType string, data []byte) ContentPart {

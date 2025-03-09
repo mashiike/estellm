@@ -10,48 +10,91 @@ import (
 	"path/filepath"
 
 	"github.com/alecthomas/kong"
+	"github.com/fatih/color"
 	"github.com/mashiike/estellm"
-
-	//builtin agents import
-	_ "github.com/mashiike/estellm/agent/constant"
+	"github.com/mashiike/slogutils"
 )
 
 type CLI struct {
-	Debug        bool              `help:"Enable debug mode" env:"DEBUG"`
-	SetLogLevvel func(slog.Level)  `kong:"-"`
-	ExtVar       map[string]string `help:"External variables external string values for Jsonnet" env:"EXT_VAR"`
-	ExtCode      map[string]string `help:"External code external string values for Jsonnet" env:"EXT_CODE"`
-	Project      string            `cmd:"" help:"Project directory" default:"./"`
-	Prompts      string            `cmd:"" help:"Prompts directory" default:"./prompts"`
-	Includes     string            `cmd:"" help:"Includes directory" default:"./includes"`
-	Exec         ExecOption        `cmd:"" help:"Execute the estellm"`
-	Rendoer      RenderOption      `cmd:"" help:"Render prompt/config the estellm"`
-	Docs         DocsOptoin        `cmd:"" help:"Show agents documentation"`
-	Version      struct{}          `cmd:"" help:"Show version"`
+	LogFormat string            `help:"Log format" enum:"json,text" default:"json"`
+	Color     bool              `help:"Enable color output" negatable:"" default:"true"`
+	Debug     bool              `help:"Enable debug mode" env:"DEBUG"`
+	Verbose   bool              `help:"Enable log verbose mode" env:"VERBOSE"`
+	ExtVar    map[string]string `help:"External variables external string values for Jsonnet" env:"EXT_VAR"`
+	ExtCode   map[string]string `help:"External code external string values for Jsonnet" env:"EXT_CODE"`
+	Project   string            `cmd:"" help:"Project directory" default:"./"`
+	Prompts   string            `cmd:"" help:"Prompts directory" default:"./prompts"`
+	Includes  string            `cmd:"" help:"Includes directory" default:"./includes"`
+	Exec      ExecOption        `cmd:"" help:"Execute the estellm"`
+	Rendoer   RenderOption      `cmd:"" help:"Render prompt/config the estellm"`
+	Docs      DocsOptoin        `cmd:"" help:"Show agents documentation"`
+	Version   struct{}          `cmd:"" help:"Show version"`
 }
 
-func New(setLogLevel func(slog.Level)) (*CLI, error) {
-	return &CLI{
-		SetLogLevvel: setLogLevel,
-	}, nil
+func newLogger(level slog.Level, format string, c bool) *slog.Logger {
+	var f func(io.Writer, *slog.HandlerOptions) slog.Handler
+	switch format {
+	case "text":
+		f = func(w io.Writer, ho *slog.HandlerOptions) slog.Handler {
+			return slog.NewTextHandler(w, ho)
+		}
+	default:
+		f = func(w io.Writer, ho *slog.HandlerOptions) slog.Handler {
+			return slog.NewJSONHandler(w, ho)
+		}
+	}
+	var modifierFuncs map[slog.Level]slogutils.ModifierFunc
+	if c {
+		modifierFuncs = map[slog.Level]slogutils.ModifierFunc{
+			slog.LevelDebug: slogutils.Color(color.FgBlack),
+			slog.LevelInfo:  nil,
+			slog.LevelWarn:  slogutils.Color(color.FgYellow),
+			slog.LevelError: slogutils.Color(color.FgRed, color.Bold),
+		}
+	}
+	middleware := slogutils.NewMiddleware(
+		f,
+		slogutils.MiddlewareOptions{
+			Writer:        os.Stderr,
+			ModifierFuncs: modifierFuncs,
+			HandlerOptions: &slog.HandlerOptions{
+				Level: level,
+			},
+		},
+	)
+	logger := slog.New(middleware)
+	return logger
 }
 
-func (c *CLI) Run(ctx context.Context) error {
+func (c *CLI) Run(ctx context.Context) int {
 	k := kong.Parse(c,
 		kong.Name("estellm"),
 		kong.Description("Estellm is a tool for llm agetnts flow control."),
 		kong.UsageOnError(),
 	)
-	var err error
-	if c.Debug && c.SetLogLevvel != nil {
-		c.SetLogLevvel(slog.LevelDebug)
+	logLevel := slog.LevelInfo
+	if c.Debug {
+		logLevel = slog.LevelDebug
 	}
+	logger := newLogger(logLevel, c.LogFormat, c.Color)
+	if c.Verbose {
+		slog.SetDefault(logger)
+	}
+	if err := c.run(ctx, k, logger); err != nil {
+		logger.Error("runtime error", "details", err)
+		return 1
+	}
+	return 0
+}
+
+func (c *CLI) run(ctx context.Context, k *kong.Context, logger *slog.Logger) error {
+	var err error
 	cmd := k.Command()
 	if cmd == "version" {
 		fmt.Printf("estellm version %s\n", estellm.Version)
 		return nil
 	}
-	mux, err := c.newAgentMux(ctx)
+	mux, err := c.newAgentMux(ctx, logger)
 	if err != nil {
 		return fmt.Errorf("initialize: %w", err)
 	}
@@ -77,23 +120,29 @@ func (c *CLI) runExec(ctx context.Context, mux *estellm.AgentMux) error {
 		return fmt.Errorf("new request: %w", err)
 	}
 	req.IncludeDeps = c.Exec.IncludeDeps
-	w := estellm.NewBatchResponseWriter()
-	if err := mux.Execute(ctx, req, w); err != nil {
-		return fmt.Errorf("execute prompt: %w", err)
-	}
-	resp := w.Response()
 	switch c.Exec.OutputFormat {
 	case "json":
+		w := estellm.NewBatchResponseWriter()
+		if err := mux.Execute(ctx, req, w); err != nil {
+			return fmt.Errorf("execute prompt: %w", err)
+		}
+		resp := w.Response()
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(resp); err != nil {
 			return fmt.Errorf("encode state: %w", err)
 		}
 	case "text":
-		enc := estellm.NewMessageEncoder(os.Stdout)
-		if err := enc.EncodeMessage(resp.Message); err != nil {
-			return fmt.Errorf("encode messages: %w", err)
+		w := estellm.NewTextStreamingResponseWriter(os.Stdout)
+		if err := mux.Execute(ctx, req, w); err != nil {
+			return fmt.Errorf("execute prompt: %w", err)
 		}
+		if c.Exec.DumpMetadata {
+			w.DumpMetadata()
+		}
+		fmt.Println()
+	default:
+		return fmt.Errorf("unknown output format: %s", c.Exec.OutputFormat)
 	}
 	return nil
 }
@@ -137,15 +186,16 @@ func (c *CLI) runDocs(_ context.Context, mux *estellm.AgentMux) error {
 	return nil
 }
 
-func (c *CLI) newAgentMux(ctx context.Context) (*estellm.AgentMux, error) {
+func (c *CLI) newAgentMux(ctx context.Context, logger *slog.Logger) (*estellm.AgentMux, error) {
 	promptsDir := filepath.Join(c.Project, c.Prompts)
 	includesDir := filepath.Join(c.Project, c.Includes)
-	slog.InfoContext(ctx, "load prompts", "prompts", promptsDir, "includes", includesDir)
+	logger.InfoContext(ctx, "load prompts", "prompts", promptsDir, "includes", includesDir)
 	if _, err := os.Stat(promptsDir); err != nil {
 		return nil, fmt.Errorf("prompts directory: %w", err)
 	}
 	promptsFS := os.DirFS(promptsDir)
 	opts := []estellm.NewAgentMuxOption{
+		estellm.WithLogger(logger),
 		estellm.WithPromptsFS(promptsFS),
 	}
 	if _, err := os.Stat(includesDir); err == nil {
@@ -193,6 +243,7 @@ type ExecOption struct {
 	PromptOption
 	OutputFormat string `help:"Output format" enum:"json,text" default:"text"`
 	IncludeDeps  bool   `help:"Include upstream dependencies"`
+	DumpMetadata bool   `help:"Dump metadata if output format is text"`
 }
 
 type RenderOption struct {

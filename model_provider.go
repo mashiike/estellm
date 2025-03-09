@@ -4,37 +4,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
 	"sync"
+
+	"github.com/mashiike/estellm/metadata"
 )
 
 type GenerateTextRequest struct {
-	ModelID     string         `json:"model_id"`
-	ModelParams map[string]any `json:"model_params"`
-	System      string         `json:"system"`
-	Messages    []Message      `json:"messages"`
-}
-
-type GenerateTextResponseWriter interface {
-	WriteReasoning([]byte) (int, error)
-	Write([]byte) (int, error)
-	Finish(reason FinishReason, msg string) error
+	Metadata    metadata.Metadata `json:"metadata"`
+	ModelID     string            `json:"model_id"`
+	ModelParams map[string]any    `json:"model_params"`
+	System      string            `json:"system"`
+	Messages    []Message         `json:"messages"`
 }
 
 type GenerateImageRequest struct {
-	ModelID     string         `json:"model_id"`
-	ModelParams map[string]any `json:"model_params"`
-	System      string         `json:"system"`
-	Messages    []Message      `json:"messages"`
-}
-
-type GenerateImageResponseWriter interface {
-	WriteImage(img image.Image) error
+	Metadata    metadata.Metadata `json:"metadata"`
+	ModelID     string            `json:"model_id"`
+	ModelParams map[string]any    `json:"model_params"`
+	System      string            `json:"system"`
+	Messages    []Message         `json:"messages"`
 }
 
 type ModelProvider interface {
-	GenerateText(ctx context.Context, req *GenerateTextRequest, w GenerateTextResponseWriter) error
-	GenerateImage(ctx context.Context, req *GenerateImageRequest, w GenerateImageResponseWriter) error
+	GenerateText(ctx context.Context, req *GenerateTextRequest, w ResponseWriter) error
+	GenerateImage(ctx context.Context, req *GenerateImageRequest, w ResponseWriter) error
 }
 
 type ModelProviderManager struct {
@@ -45,6 +38,7 @@ type ModelProviderManager struct {
 var (
 	ErrModelProviderNameEmpty         = errors.New("model provider name is empty")
 	ErrModelProviderAlreadyRegistered = errors.New("model provider already registered")
+	ErrModelNotFound                  = errors.New("model not found")
 )
 
 func (m *ModelProviderManager) Register(name string, provider ModelProvider) error {
