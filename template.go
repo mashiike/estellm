@@ -50,6 +50,12 @@ var builtinTemplateFuncs = template.FuncMap{
 	"self": func() (map[string]any, error) {
 		return newReference(nil, nil), nil
 	},
+	"dependents": func() map[string]any {
+		return map[string]any{}
+	},
+	"dependentNames": func() []string {
+		return []string{}
+	},
 }
 
 // ConfigLoadPhaseTemplateFuncs returns the template functions for the config load phase.
@@ -90,6 +96,32 @@ func PromptExecutionPhaseTemplateFuncs(p *Prompt, req *Request) template.FuncMap
 			relatedCfg = relatedPrompt.Config()
 		}
 		return newReference(relatedCfg, resp), nil
+	}
+	ret["dependents"] = func() map[string]any {
+		if p.relatedPrompts == nil {
+			return map[string]any{}
+		}
+		cfg := p.Config()
+		if cfg == nil {
+			return map[string]any{}
+		}
+		deps := make(map[string]any, 0)
+		for _, dep := range cfg.dependents {
+			if relatedPrompt, ok := p.relatedPrompts[dep]; ok {
+				deps[dep] = newReference(relatedPrompt.Config(), nil)
+			}
+		}
+		return deps
+	}
+	ret["dependentNames"] = func() []string {
+		if p.relatedPrompts == nil {
+			return []string{}
+		}
+		cfg := p.Config()
+		if cfg == nil {
+			return []string{}
+		}
+		return cfg.dependents
 	}
 	return ret
 }

@@ -131,4 +131,30 @@ func TestLoader(t *testing.T) {
 		g.Assert(t, "rendered", []byte(renderd))
 		require.ElementsMatch(t, []string{"dummy_block"}, p.Blocks())
 	})
+	t.Run("before1", func(t *testing.T) {
+		p := prompts["before1"]
+		cfg := p.Config()
+		require.NotNil(t, cfg)
+		require.Equal(t, "before1.md", cfg.PromptPath)
+		require.Equal(t, "before1", p.Name())
+		require.Equal(t, "test_agent", cfg.Type)
+		require.ElementsMatch(t,
+			[]string{},
+			cfg.DependsOn,
+		)
+		g := goldie.New(
+			t,
+			goldie.WithFixtureDir("testdata/fixtures/before1"),
+		)
+		g.WithNameSuffix(".golden.jsonnet")
+		g.Assert(t, "config", []byte(cfg.Raw))
+		g.WithNameSuffix(".golden.md")
+		g.Assert(t, "pre_render", []byte(p.PreRendered()))
+		req, err := estellm.NewRequest("before1", map[string]interface{}{})
+		require.NoError(t, err)
+		renderd, err := p.Render(ctx, req)
+		require.NoError(t, err)
+		g.Assert(t, "rendered", []byte(renderd))
+		require.ElementsMatch(t, []string{}, p.Blocks())
+	})
 }

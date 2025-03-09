@@ -144,6 +144,9 @@ func (l *Loader) LoadFS(ctx context.Context, fsys fs.FS) (map[string]*Prompt, ma
 	if err != nil {
 		return nil, nil, fmt.Errorf("check dependencies: %w", err)
 	}
+	for name, p := range prompts {
+		p.cfg.AppendDependents(dependents[name]...)
+	}
 	return prompts, dependents, nil
 }
 

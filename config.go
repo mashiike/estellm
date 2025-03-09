@@ -21,6 +21,7 @@ type Config struct {
 	PayloadSchema map[string]any `json:"payload_schema,omitempty"`
 	vm            *jsonnet.VM    `json:"-"`
 	rawMap        map[string]any `json:"-"`
+	dependents    []string       `json:"-"`
 }
 
 func newConfig(vm *jsonnet.VM, raw, promptPath string) (*Config, error) {
@@ -41,6 +42,9 @@ func newConfig(vm *jsonnet.VM, raw, promptPath string) (*Config, error) {
 	if config.Enabled == nil {
 		config.Enabled = ptr(true)
 	}
+	if config.PayloadSchema == nil {
+		config.PayloadSchema = make(map[string]any)
+	}
 	config.PromptPath = promptPath
 	config.Raw = raw
 	config.vm = vm
@@ -50,6 +54,15 @@ func newConfig(vm *jsonnet.VM, raw, promptPath string) (*Config, error) {
 	}
 	config.rawMap = rawMap
 	return &config, nil
+}
+
+func (cfg *Config) AppendDependents(dependents ...string) {
+	cfg.dependents = append(cfg.dependents, dependents...)
+	slices.Sort(cfg.dependents)
+	cfg.dependents = slices.Compact(cfg.dependents)
+	if cfg.rawMap != nil {
+		cfg.rawMap["dependents"] = cfg.dependents
+	}
 }
 
 func (cfg *Config) AppendDependsOn(dependsOn ...string) {
@@ -72,6 +85,7 @@ func (cfg *Config) Clone() *Config {
 		rawMap:        maps.Clone(cfg.rawMap),
 		vm:            cfg.vm,
 		Enabled:       ptr(*cfg.Enabled),
+		dependents:    slices.Clone(cfg.dependents),
 	}
 }
 
