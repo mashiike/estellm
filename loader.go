@@ -25,10 +25,11 @@ type Loader struct {
 	prepareTemplate func() (*template.Template, error)
 	patterns        []string
 	gen             ValueGenerator
+	reg             *Registry
 }
 
 func NewLoader() *Loader {
-	tmpl := template.New("prompt").Funcs(ConfigLoadPhaseTemplateFuncs())
+	tmpl := template.New("prompt")
 	l := &Loader{
 		importer:        aliasimporter.New(),
 		tmpl:            tmpl,
@@ -37,6 +38,7 @@ func NewLoader() *Loader {
 		extCodes:        make(map[string]string),
 		extVars:         make(map[string]string),
 		nativeFunctions: make(map[string]*jsonnet.NativeFunction),
+		reg:             defaultRegistory,
 	}
 	l.resetPrepare()
 	return l
@@ -55,6 +57,11 @@ func (l *Loader) makeVM() *jsonnet.VM {
 		vm.NativeFunction(f)
 	}
 	return vm
+}
+
+func (l *Loader) Registry(reg *Registry) {
+	l.reg = reg
+	l.resetPrepare()
 }
 
 func (l *Loader) ExtVars(extVars map[string]string) {
@@ -111,6 +118,7 @@ func (l *Loader) load(_ context.Context, fsys fs.FS, promptPath string) (*Prompt
 		cfg:         cfg,
 		tmpl:        tmpl,
 		preRendered: preRendered,
+		reg:         l.reg,
 	}
 	return p, nil
 }
@@ -187,7 +195,7 @@ func (l *Loader) preRender(tmpl *template.Template, cfg *Config) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("clone template: %w", err)
 	}
-	tmpl = tmpl.Funcs(PreRenderPhaseTemplateFuncs(cfg))
+	tmpl = tmpl.Funcs(PreRenderPhaseTemplateFuncs(l.reg, cfg))
 	dummyData, err := l.gen.Generate(cfg.PayloadSchema)
 	if err != nil {
 		return "", fmt.Errorf("generate dummy data: %w", err)
@@ -234,7 +242,7 @@ func (l *Loader) resetPrepare() {
 }
 
 func (l *Loader) prepareTemplateImpl() (*template.Template, error) {
-	tmpl := l.tmpl
+	tmpl := l.tmpl.Funcs(ConfigLoadPhaseTemplateFuncs(l.reg))
 	if l.includesFS != nil {
 		paths, err := recursiveGlob(l.includesFS, l.patterns...)
 		if err != nil {

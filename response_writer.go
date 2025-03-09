@@ -193,3 +193,11 @@ func (w *TextStreamingResponseWriter) DumpMetadata() {
 	fmt.Fprintln(w.w)
 	fmt.Fprintln(w.w, w.metadata)
 }
+
+const (
+	metadataKeyNextAgents = "Next-Agents"
+)
+
+func SetNextAgents(w ResponseWriter, agents ...string) {
+	w.Metadata().SetStrings(metadataKeyNextAgents, agents)
+}

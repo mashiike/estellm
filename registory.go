@@ -13,9 +13,10 @@ type NewAgentFunc func(context.Context, *Prompt) (Agent, error)
 
 // Registry is a registry of agents.
 type Registry struct {
-	mu            sync.RWMutex
-	newFuncs      map[string]NewAgentFunc
-	templateFuncs map[string]template.FuncMap
+	mu                  sync.RWMutex
+	newFuncs            map[string]NewAgentFunc
+	templateFuncs       map[string]template.FuncMap
+	marmaidNodeWrappers map[string]func(string) string
 }
 
 // NewRegistry creates a new registry.
@@ -66,6 +67,58 @@ func (r *Registry) SetTemplateFuncs(name string, funcs template.FuncMap) error {
 	return nil
 }
 
+func (r *Registry) SetMarmaidNodeWrapper(name string, f func(string) string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if name == "" {
+		return ErrAgentTypeEmpty
+	}
+	if _, ok := r.newFuncs[name]; !ok {
+		return ErrAgentNotFound
+	}
+	if r.marmaidNodeWrappers == nil {
+		r.marmaidNodeWrappers = make(map[string]func(string) string)
+	}
+	r.marmaidNodeWrappers[name] = f
+	return nil
+}
+
+func (r *Registry) getTemplateFuncs(name string) template.FuncMap {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if name == "" {
+		return template.FuncMap{}
+	}
+	if r.templateFuncs == nil {
+		return template.FuncMap{}
+	}
+	return r.templateFuncs[name]
+}
+
+func (r *Registry) getMergedTemplateFuncs() template.FuncMap {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.templateFuncs == nil {
+		return template.FuncMap{}
+	}
+	if fmap, err := mergeFuncMaps(r.templateFuncs); err == nil {
+		return fmap
+	}
+	return template.FuncMap{}
+}
+
+func (r *Registry) getMarmaidNodeWrapper(name string) func(string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if name == "" {
+		return nil
+	}
+	if r.marmaidNodeWrappers == nil {
+		return nil
+	}
+	return r.marmaidNodeWrappers[name]
+}
+
 // Exists returns true if the agent type is registered.
 func (r *Registry) Exists(name string) bool {
 	r.mu.RLock()
@@ -101,6 +154,10 @@ func RegisterAgent(name string, f NewAgentFunc) error {
 // SetAgentTemplateFuncs sets template functions for the agent type.
 func SetAgentTemplateFuncs(name string, funcs template.FuncMap) error {
 	return defaultRegistory.SetTemplateFuncs(name, funcs)
+}
+
+func SetAgentMarmaidNodeWrapper(name string, f func(string) string) error {
+	return defaultRegistory.SetMarmaidNodeWrapper(name, f)
 }
 
 // DefaultRegistory returns the default registry.

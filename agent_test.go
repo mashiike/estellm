@@ -67,7 +67,8 @@ func TestNewAgentMux__Cycle(t *testing.T) {
 
 func TestNewAgentMux__Execute(t *testing.T) {
 	seed := [32]byte{1}
-	gen := estellm.NewSchemaValueGenerator(rand.New(rand.NewChaCha8(seed)))
+	randReader := rand.New(rand.NewChaCha8(seed))
+	gen := estellm.NewSchemaValueGenerator(randReader)
 	var executionHistory strings.Builder
 	reg := estellm.NewRegistry()
 	reg.Register("test_agent", estellm.NewAgentFunc(func(ctx context.Context, p *estellm.Prompt) (estellm.Agent, error) {
@@ -85,6 +86,24 @@ func TestNewAgentMux__Execute(t *testing.T) {
 			return nil
 		}), nil
 	}))
+	reg.Register("test_decision", estellm.NewAgentFunc(func(ctx context.Context, p *estellm.Prompt) (estellm.Agent, error) {
+		return estellm.AgentFunc(func(ctx context.Context, req *estellm.Request, rw estellm.ResponseWriter) error {
+			deps := p.Config().Dependents()
+			if len(deps) > 1 {
+				index := randReader.IntN(len(deps))
+				dep := deps[index]
+				fmt.Fprintf(&executionHistory, "decision %s -> %s \n", p.Name(), dep)
+				estellm.SetNextAgents(rw, dep)
+			}
+			w := estellm.ResponseWriterToWriter(rw)
+			fmt.Fprintf(w, "execute %s \n", p.Name())
+			fmt.Fprintf(&executionHistory, "execute %s \n", p.Name())
+			return nil
+		}), nil
+	}))
+	reg.SetMarmaidNodeWrapper("test_decision", func(name string) string {
+		return fmt.Sprintf("{%s}", name)
+	})
 	g := goldie.New(t,
 		goldie.WithFixtureDir("testdata/fixtures/structure"),
 		goldie.WithNameSuffix(".golden.md"),
@@ -133,6 +152,12 @@ func TestNewAgentMux__Execute(t *testing.T) {
 			prompts:  "testdata/toolcall/prompts",
 			start:    "main",
 		},
+		{
+			name:     "decision",
+			includes: "testdata/decision/includes",
+			prompts:  "testdata/decision/prompts",
+			start:    "main",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -143,11 +168,11 @@ func TestNewAgentMux__Execute(t *testing.T) {
 				estellm.WithPromptsFS(os.DirFS(c.prompts)),
 			)
 			require.NoError(t, err)
-			err = mux.Validate()
-			require.NoError(t, err)
 			if !c.skipStructure {
 				g.Assert(t, c.name, []byte(mux.ToMarkdown()))
 			}
+			err = mux.Validate()
+			require.NoError(t, err)
 			executionHistory.Reset()
 			req, err := estellm.NewRequest(c.start, c.payload)
 			require.NoError(t, err)

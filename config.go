@@ -98,6 +98,10 @@ func (cfg *Config) Clone() *Config {
 	}
 }
 
+func (cfg *Config) Dependents() []string {
+	return slices.Clone(cfg.dependents)
+}
+
 func (cfg *Config) Decode(v any) error {
 	vm := cfg.vm
 	if vm == nil {

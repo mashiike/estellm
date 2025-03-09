@@ -36,6 +36,7 @@ type AgentMux struct {
 	isCycle          bool
 	validate         func() error
 	logger           *slog.Logger
+	reg              *Registry
 }
 
 type newAgentMuxOptions struct {
@@ -129,6 +130,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 	loader.ExtVars(o.extVars)
 	loader.NativeFunctions(o.nativeFunctions...)
 	loader.TemplateFuncs(o.templateFuncs)
+	loader.Registry(reg)
 	prompts, dependents, err := loader.LoadFS(ctx, o.promptsFs)
 	if err != nil {
 		return nil, err
@@ -154,6 +156,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		dependents:       dependents,
 		logger:           o.logger,
 		toolsDepenedents: toolsDepenedents,
+		reg:              reg,
 	}
 	mux.validate = sync.OnceValue(mux.validateImpl)
 	return mux, nil
@@ -188,11 +191,21 @@ func (mux *AgentMux) ToMarkdown() string {
 	nodes := slices.Collect(maps.Keys(mux.dependents))
 	slices.Sort(nodes)
 	nodesAlias := make(map[string]string, len(nodes))
+	wrapper := make(map[string]func(string) string, len(nodes))
 	for i, node := range nodes {
 		nodesAlias[node] = fmt.Sprintf("A%d", i)
+		if p, ok := mux.prompts[node]; ok {
+			wrapper[node] = mux.reg.getMarmaidNodeWrapper(p.Config().Type)
+		}
+		if wrapper[node] == nil {
+			wrapper[node] = func(node string) string {
+				return fmt.Sprintf("[%s]", node)
+			}
+		}
 	}
 	for _, node := range nodes {
-		sb.WriteString(fmt.Sprintf("    %s[%s]\n", nodesAlias[node], node))
+		w := wrapper[node]
+		sb.WriteString(fmt.Sprintf("    %s%s\n", nodesAlias[node], w(node)))
 	}
 	for _, node := range nodes {
 		deps := mux.dependents[node]
@@ -226,6 +239,7 @@ func (mux *AgentMux) Execute(ctx context.Context, req *Request, w ResponseWriter
 
 func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string, req *Request, w ResponseWriter) error {
 	done := make(map[string]bool, len(graph))
+	skiped := make(map[string]bool, len(graph))
 	sortedNodes, err := topologicalSort(graph)
 	if err != nil {
 		return fmt.Errorf("topological sort: %w", err)
@@ -243,27 +257,61 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 			if done[node] {
 				continue
 			}
-			if err := mux.executeOne(ctx, node, req, w, previousResults, sinkNodes); err != nil {
+			cfg := mux.prompts[node].Config()
+			if len(cfg.DependsOn) > 0 {
+				allSkiped := true
+				for _, dep := range cfg.DependsOn {
+					if !skiped[dep] {
+						allSkiped = false
+						break
+					}
+				}
+				if allSkiped {
+					mux.logger.DebugContext(ctx, "skip node", "node", node)
+					skiped[node] = true
+					done[node] = true
+					continue
+				}
+			}
+			nextAgents, err := mux.executeOne(ctx, cfg, node, req, w, previousResults, sinkNodes)
+			if err != nil {
 				return err
 			}
 			done[node] = true
+			if len(nextAgents) == 0 {
+				continue
+			}
+			deps := cfg.Dependents()
+			skipTargets := make([]string, 0, len(deps))
+			execTargets := make([]string, 0, len(deps))
+			for _, dep := range deps {
+				if slices.Contains(nextAgents, dep) {
+					execTargets = append(execTargets, dep)
+				} else {
+					skipTargets = append(skipTargets, dep)
+				}
+			}
+			if len(execTargets) == 0 {
+				mux.logger.WarnContext(ctx, "next node all skiped", "targets", skipTargets)
+				w.Finish(FinishReasonEndTurn, "agents all skiped")
+				return nil
+			}
+			for _, target := range skipTargets {
+				skiped[target] = true
+				done[target] = true
+			}
 		}
 	}
 	return nil
 }
 
-func (mux *AgentMux) executeOne(ctx context.Context, node string, req *Request, w ResponseWriter, previousResults map[string]*Response, sinkNodes []string) error {
+func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, node string, req *Request, w ResponseWriter, previousResults map[string]*Response, sinkNodes []string) ([]string, error) {
 	agent, ok := mux.agents[node]
 	if !ok {
-		return fmt.Errorf("agent `%s` not found", node)
+		return nil, fmt.Errorf("agent `%s` not found", node)
 	}
-	p, ok := mux.prompts[node]
-	if !ok {
-		return fmt.Errorf("prompt `%s` not found", node)
-	}
-	cfg := p.Config()
 	if !*cfg.Enabled {
-		return fmt.Errorf("prompt `%s` is disabled", node)
+		return nil, fmt.Errorf("prompt `%s` is disabled", node)
 	}
 	cloned := req.Clone()
 	cloned = mux.refineRequest(cfg, cloned)
@@ -298,16 +346,17 @@ func (mux *AgentMux) executeOne(ctx context.Context, node string, req *Request, 
 	w.Metadata().MergeInPlace(cfg.ResponseMetadata)
 	if slices.Contains(sinkNodes, node) {
 		if err := agent.Execute(ctx, cloned, w); err != nil {
-			return fmt.Errorf("execute `%s`: %w", node, err)
+			return nil, fmt.Errorf("execute `%s`: %w", node, err)
 		}
-		return nil
+		return nil, nil
 	}
 	batchWriter := NewBatchResponseWriter()
 	if err := agent.Execute(ctx, cloned, batchWriter); err != nil {
-		return fmt.Errorf("execute `%s`: %w", node, err)
+		return nil, fmt.Errorf("execute `%s`: %w", node, err)
 	}
-	previousResults[node] = batchWriter.Response()
-	return nil
+	resp := batchWriter.Response()
+	previousResults[node] = resp
+	return resp.Metadata.GetStrings(metadataKeyNextAgents), nil
 }
 
 func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {

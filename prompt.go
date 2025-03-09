@@ -16,6 +16,7 @@ type Prompt struct {
 	tmpl           *template.Template
 	preRendered    string
 	relatedPrompts map[string]*Prompt
+	reg            *Registry
 }
 
 func (p *Prompt) Name() string {

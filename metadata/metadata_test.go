@@ -72,7 +72,8 @@ func TestUnmarshalJSON_Success(t *testing.T) {
 		"key2": 12345,
 		"key3": 123.45,
 		"key4": true,
-		"key5": "dGVzdCBieXRlcw=="
+		"key5": "dGVzdCBieXRlcw==",
+		"key6": ["value1","value2"]
 	}`
 
 	var m Metadata
@@ -92,6 +93,8 @@ func TestUnmarshalJSON_Success(t *testing.T) {
 	valueBytes, ok := m.GetBytes("key5")
 	require.True(t, ok)
 	require.Equal(t, []byte("test bytes"), valueBytes)
+	valueStrings := m.GetStrings("key6")
+	require.Equal(t, []string{"value1", "value2"}, valueStrings)
 }
 
 func TestUnmarshalJSON_Failure(t *testing.T) {

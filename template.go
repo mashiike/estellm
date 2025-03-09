@@ -59,14 +59,15 @@ var builtinTemplateFuncs = template.FuncMap{
 }
 
 // ConfigLoadPhaseTemplateFuncs returns the template functions for the config load phase.
-func ConfigLoadPhaseTemplateFuncs() template.FuncMap {
-	ret := sprig.TxtFuncMap()
+func ConfigLoadPhaseTemplateFuncs(reg *Registry) template.FuncMap {
+	ret := reg.getMergedTemplateFuncs()
+	maps.Copy(ret, sprig.TxtFuncMap())
 	maps.Copy(ret, builtinTemplateFuncs)
 	return ret
 }
 
-func PreRenderPhaseTemplateFuncs(cfg *Config) template.FuncMap {
-	ret := ConfigLoadPhaseTemplateFuncs()
+func PreRenderPhaseTemplateFuncs(reg *Registry, cfg *Config) template.FuncMap {
+	ret := ConfigLoadPhaseTemplateFuncs(reg)
 	baseRef := ret["ref"].(func(string) (map[string]any, error))
 	ret["ref"] = func(name string) (map[string]any, error) {
 		cfg.AppendDependsOn(name)
@@ -79,7 +80,8 @@ func PreRenderPhaseTemplateFuncs(cfg *Config) template.FuncMap {
 }
 
 func PromptExecutionPhaseTemplateFuncs(p *Prompt, req *Request) template.FuncMap {
-	ret := PreRenderPhaseTemplateFuncs(p.Config())
+	ret := PreRenderPhaseTemplateFuncs(p.reg, p.Config())
+	maps.Copy(ret, p.reg.getTemplateFuncs(p.Name()))
 	ret["ref"] = func(name string) (map[string]any, error) {
 		if req == nil {
 			return nil, fmt.Errorf("request is nil")

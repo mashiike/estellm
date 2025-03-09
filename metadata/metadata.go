@@ -72,26 +72,47 @@ func (m Metadata) SetFloat64(key string, value float64) {
 	m[textproto.CanonicalMIMEHeaderKey(key)] = value
 }
 
-func (m Metadata) GetString(key string) string {
+func (m Metadata) GetStrings(key string) []string {
 	value := m[textproto.CanonicalMIMEHeaderKey(key)]
 	switch v := value.(type) {
 	case int64:
-		return strconv.FormatInt(v, 10)
+		return []string{strconv.FormatInt(v, 10)}
 	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	case string:
+		return []string{strconv.FormatFloat(v, 'f', -1, 64)}
+	case []string:
 		return v
 	case bool:
-		return strconv.FormatBool(v)
+		return []string{strconv.FormatBool(v)}
 	case []byte:
-		return base64.StdEncoding.EncodeToString(v)
+		return []string{base64.StdEncoding.EncodeToString(v)}
 	default:
-		return ""
+		return []string{}
 	}
 }
 
+func (m Metadata) GetString(key string) string {
+	strs := m.GetStrings(key)
+	if len(strs) > 0 {
+		return strs[0]
+	}
+	return ""
+}
+
+func (m Metadata) AddString(key string, value string) {
+	strs, ok := m[textproto.CanonicalMIMEHeaderKey(key)].([]string)
+	if !ok {
+		m.SetString(key, value)
+		return
+	}
+	m[textproto.CanonicalMIMEHeaderKey(key)] = append(strs, value)
+}
+
 func (m Metadata) SetString(key string, value string) {
-	m[textproto.CanonicalMIMEHeaderKey(key)] = value
+	m[textproto.CanonicalMIMEHeaderKey(key)] = []string{value}
+}
+
+func (m Metadata) SetStrings(key string, values []string) {
+	m[textproto.CanonicalMIMEHeaderKey(key)] = values
 }
 
 func (m Metadata) GetBool(key string) (bool, bool) {
@@ -117,7 +138,7 @@ func (m Metadata) String() string {
 	for key := range m {
 		sb.WriteString(key)
 		sb.WriteString(": ")
-		sb.WriteString(m.GetString(key))
+		sb.WriteString(strings.Join(m.GetStrings(key), ", "))
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -132,24 +153,31 @@ func (m *Metadata) UnmarshalJSON(data []byte) error {
 		*m = make(Metadata, len(raw))
 	}
 	for key, value := range raw {
-		canonicalKey := textproto.CanonicalMIMEHeaderKey(key)
 		switch v := value.(type) {
 		case string:
 			if bs, err := base64.StdEncoding.DecodeString(v); err == nil {
-				(*m)[canonicalKey] = bs
+				(*m).SetBytes(key, bs)
 			} else {
-				(*m)[canonicalKey] = v
+				(*m).SetString(key, v)
 			}
 		case float64:
 			if float64(int64(v)) == v {
-				(*m)[canonicalKey] = int64(v)
+				(*m).SetInt64(key, int64(v))
 			} else {
-				(*m)[canonicalKey] = v
+				(*m).SetFloat64(key, v)
 			}
 		case bool:
-			(*m)[canonicalKey] = v
+			(*m).SetBool(key, v)
 		case int:
-			(*m)[canonicalKey] = int64(v)
+			(*m).SetInt64(key, int64(v))
+		case []any:
+			for _, item := range v {
+				s, ok := item.(string)
+				if !ok {
+					return errors.New("unsupported value type")
+				}
+				m.AddString(key, s)
+			}
 		default:
 			return errors.New("unsupported value type")
 		}
