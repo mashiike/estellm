@@ -62,6 +62,8 @@ func (a *Agent) Execute(ctx context.Context, req *estellm.Request, w estellm.Res
 		ModelParams: a.cfg.ModelParams,
 		System:      system,
 		Messages:    msgs,
+		Tools:       req.Tools,
+		Metadata:    req.Metadata,
 	}
 	return a.modelProvider.GenerateText(ctx, modelReq, w)
 }

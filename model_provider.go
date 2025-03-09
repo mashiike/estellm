@@ -15,6 +15,7 @@ type GenerateTextRequest struct {
 	ModelParams map[string]any    `json:"model_params"`
 	System      string            `json:"system"`
 	Messages    []Message         `json:"messages"`
+	Tools       ToolSet           `json:"tools"`
 }
 
 type GenerateImageRequest struct {

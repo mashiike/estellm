@@ -24,6 +24,7 @@ func TestConfigClone(t *testing.T) {
 		Tools:            []string{"tool1", "tool2"},
 		RequestMetadata:  metadata.Metadata{"req_key": "req_value"},
 		ResponseMetadata: metadata.Metadata{"res_key": "res_value"},
+		Description:      "test_description",
 	}
 
 	clone := original.Clone()

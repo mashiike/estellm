@@ -1,6 +1,7 @@
 package bedrock
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"mime"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -173,55 +175,251 @@ func (p *ModelProvider) GenerateText(ctx context.Context, req *estellm.GenerateT
 			input.RequestMetadata[k] = req.Metadata.GetString(k)
 		}
 	}
-	return p.generateTextSingleTurn(ctx, input, w)
-}
-
-func (p *ModelProvider) generateTextSingleTurn(ctx context.Context, input *bedrockruntime.ConverseStreamInput, w estellm.ResponseWriter) error {
-	slog.DebugContext(ctx, "converse stream", "input", input)
-	output, err := p.client.ConverseStream(ctx, input)
-	if err != nil {
-		return fmt.Errorf("converse stream: %w", err)
-	}
-	slog.DebugContext(ctx, "converse stream output tailing", "result_metadta", output.ResultMetadata)
-	var msg types.Message
-	var currentContent types.ContentBlock
-	for o := range output.GetStream().Events() {
-		switch v := o.(type) {
-		case *types.ConverseStreamOutputMemberContentBlockStart:
-			cb, err := processContentBlockStart(ctx, v, w)
-			if err != nil {
-				return fmt.Errorf("process content block start: %w", err)
-			}
-			currentContent = cb
-		case *types.ConverseStreamOutputMemberContentBlockDelta:
-			cb, err := processContentBlockDelta(ctx, v, w)
-			if err != nil {
-				return fmt.Errorf("process content block delta: %w", err)
-			}
-			currentContent = mergeContentBlock(currentContent, cb)
-		case *types.ConverseStreamOutputMemberContentBlockStop:
-			if currentContent != nil {
-				msg.Content = append(msg.Content, currentContent)
-				currentContent = nil
-			}
-		case *types.ConverseStreamOutputMemberMessageStart:
-			if err := processMessageStart(ctx, v, w); err != nil {
-				return fmt.Errorf("process message start: %w", err)
-			}
-			msg.Role = v.Value.Role
-		case *types.ConverseStreamOutputMemberMetadata:
-			setToMetadata(v.Value, w.Metadata())
-			slog.DebugContext(ctx, "metadata updated", "value", v.Value)
-		case *types.ConverseStreamOutputMemberMessageStop:
-			if err := processMessageStop(ctx, v, w); err != nil {
-				return fmt.Errorf("process message stop: %w", err)
-			}
-		default:
-			slog.DebugContext(ctx, "unknown event", "type", fmt.Sprintf("%T", o))
+	if len(req.Tools) > 0 {
+		input.ToolConfig = &types.ToolConfiguration{
+			Tools: make([]types.Tool, 0, len(req.Tools)),
+		}
+		for _, tool := range req.Tools {
+			slog.Debug("tool spec", "name", tool.Name(), "description", tool.Description(), "input_schema", tool.InputSchema())
+			input.ToolConfig.Tools = append(input.ToolConfig.Tools, &types.ToolMemberToolSpec{
+				Value: types.ToolSpecification{
+					Name:        aws.String(NormalizeToolName(tool.Name())),
+					Description: aws.String(tool.Description()),
+					InputSchema: &types.ToolInputSchemaMemberJson{
+						Value: document.NewLazyDocument(tool.InputSchema()),
+					},
+				},
+			})
 		}
 	}
-	slog.Debug("message complete", "message", msg)
-	return nil
+	return p.generateTextSingleTurn(ctx, input, w, req.Tools)
+}
+
+var (
+	toolNameRe = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+)
+
+func NormalizeToolName(input string) string {
+	normalized := toolNameRe.ReplaceAllString(input, "_")
+	normalized = strings.Trim(normalized, "_")
+	if len(normalized) > 64 {
+		normalized = normalized[:64]
+	}
+	if normalized == "" {
+		return "default_tool"
+	}
+	return normalized
+}
+
+func (p *ModelProvider) generateTextSingleTurn(ctx context.Context, input *bedrockruntime.ConverseStreamInput, w estellm.ResponseWriter, tools estellm.ToolSet) error {
+	slog.DebugContext(ctx, "converse stream", "input", input)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		slog.DebugContext(ctx, "call converse stream")
+		output, err := p.client.ConverseStream(ctx, input)
+		if err != nil {
+			return fmt.Errorf("converse stream: %w", err)
+		}
+		slog.DebugContext(ctx, "converse stream output tailing", "result_metadta", output.ResultMetadata)
+		var msg types.Message
+		var currentContent types.ContentBlock
+		var toolInputBuilder bytes.Buffer
+		for o := range output.GetStream().Events() {
+			switch v := o.(type) {
+			case *types.ConverseStreamOutputMemberContentBlockStart:
+				cb, err := processContentBlockStart(ctx, v, w, &toolInputBuilder)
+				if err != nil {
+					return fmt.Errorf("process content block start: %w", err)
+				}
+				currentContent = cb
+			case *types.ConverseStreamOutputMemberContentBlockDelta:
+				cb, err := processContentBlockDelta(ctx, v, w, &toolInputBuilder)
+				if err != nil {
+					return fmt.Errorf("process content block delta: %w", err)
+				}
+				currentContent = mergeContentBlock(currentContent, cb)
+			case *types.ConverseStreamOutputMemberContentBlockStop:
+				if toolInputBuilder.Len() > 0 {
+					var input any
+					if err := json.Unmarshal(toolInputBuilder.Bytes(), &input); err != nil {
+						return fmt.Errorf("unmarshal tool input: %w", err)
+					}
+					currentContent = mergeContentBlock(currentContent, &types.ContentBlockMemberToolUse{
+						Value: types.ToolUseBlock{
+							Input: document.NewLazyDocument(input),
+						},
+					})
+				}
+				if currentContent != nil {
+					msg.Content = append(msg.Content, currentContent)
+					currentContent = nil
+				}
+			case *types.ConverseStreamOutputMemberMessageStart:
+				if err := processMessageStart(ctx, v, w); err != nil {
+					return fmt.Errorf("process message start: %w", err)
+				}
+				msg.Role = v.Value.Role
+			case *types.ConverseStreamOutputMemberMetadata:
+				setToMetadata(v.Value, w.Metadata())
+				slog.DebugContext(ctx, "metadata updated", "value", v.Value)
+			case *types.ConverseStreamOutputMemberMessageStop:
+				slog.Debug("message complete", "message", msg)
+				toolUse, err := processMessageStop(ctx, v, w)
+				if err != nil {
+					return fmt.Errorf("process message stop: %w", err)
+				}
+				if !toolUse {
+					return nil
+				}
+			default:
+				slog.DebugContext(ctx, "unknown event", "type", fmt.Sprintf("%T", o))
+			}
+		}
+		input.Messages = append(input.Messages, msg)
+		toolUseId, toolName, toolInput, err := extructToolUse(msg)
+		if err != nil {
+			return fmt.Errorf("extract tool use: %w", err)
+		}
+		slog.DebugContext(ctx, "tool use", "tool_use_id", toolUseId, "tool_name", toolName, "input", toolInput)
+		msg, err = toolCall(ctx, tools, toolUseId, toolName, toolInput)
+		if err != nil {
+			return fmt.Errorf("tool call: %w", err)
+		}
+		slog.DebugContext(ctx, "tool result", "message", msg)
+		input.Messages = append(input.Messages, msg)
+	}
+}
+
+func extructToolUse(msg types.Message) (string, string, any, error) {
+	for _, cb := range msg.Content {
+		if cb, ok := cb.(*types.ContentBlockMemberToolUse); ok {
+			bs, err := cb.Value.Input.MarshalSmithyDocument()
+			if err != nil {
+				return "", "", nil, fmt.Errorf("marshal tool input: %w", err)
+			}
+			var input any
+			if err := json.Unmarshal(bs, &input); err != nil {
+				return "", "", nil, fmt.Errorf("unmarshal tool input: %w", err)
+			}
+			return *cb.Value.ToolUseId, *cb.Value.Name, input, nil
+		}
+	}
+	return "", "", nil, errors.New("tool use not found")
+}
+
+func newToolResultWithError(toolUseID string, err error) types.Message {
+	return types.Message{
+		Role: types.ConversationRoleUser,
+		Content: []types.ContentBlock{
+			&types.ContentBlockMemberToolResult{
+				Value: types.ToolResultBlock{
+					ToolUseId: aws.String(toolUseID),
+					Status:    types.ToolResultStatusError,
+					Content: []types.ToolResultContentBlock{
+						&types.ToolResultContentBlockMemberText{
+							Value: fmt.Sprintf("error: %s", err),
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func newToolResultWithResponse(toolUseID string, response *estellm.Response) types.Message {
+	content := make([]types.ToolResultContentBlock, 0, len(response.Message.Parts))
+	for _, part := range response.Message.Parts {
+		switch part.Type {
+		case estellm.PartTypeText:
+			content = append(content, &types.ToolResultContentBlockMemberText{
+				Value: part.Text,
+			})
+		case estellm.PartTypeBinary:
+			mediaType, _, err := mime.ParseMediaType(part.MIMEType)
+			if err != nil {
+				return newToolResultWithError(toolUseID, fmt.Errorf("tool result parse media type: %w", err))
+			}
+			switch {
+			case strings.HasPrefix(mediaType, "image/"):
+				var format types.ImageFormat
+				switch mediaType {
+				case "image/jpeg":
+					format = types.ImageFormatJpeg
+				case "image/png":
+					format = types.ImageFormatPng
+				case "image/gif":
+					format = types.ImageFormatGif
+				case "image/webp":
+					format = types.ImageFormatWebp
+				default:
+					return newToolResultWithError(toolUseID, fmt.Errorf("tool result unsupported image format: %s", mediaType))
+				}
+				content = append(content, &types.ToolResultContentBlockMemberImage{
+					Value: types.ImageBlock{
+						Format: format,
+						Source: &types.ImageSourceMemberBytes{
+							Value: part.Data,
+						},
+					},
+				})
+			case mediaType == "text/html":
+				content = append(content, &types.ToolResultContentBlockMemberDocument{
+					Value: types.DocumentBlock{
+						Format: types.DocumentFormatHtml,
+						Name:   aws.String("document"),
+						Source: &types.DocumentSourceMemberBytes{
+							Value: part.Data,
+						},
+					},
+				})
+			case strings.HasPrefix(mediaType, "text/"):
+				content = append(content, &types.ToolResultContentBlockMemberText{
+					Value: string(part.Data),
+				})
+			case mediaType == "application/pdf":
+				content = append(content, &types.ToolResultContentBlockMemberDocument{
+					Value: types.DocumentBlock{
+						Format: types.DocumentFormatPdf,
+						Name:   aws.String("document"),
+						Source: &types.DocumentSourceMemberBytes{
+							Value: part.Data,
+						},
+					},
+				})
+			default:
+				return newToolResultWithError(toolUseID, fmt.Errorf("tool result unsupported binary content type: %s", mediaType))
+			}
+		}
+	}
+	return types.Message{
+		Role: types.ConversationRoleUser,
+		Content: []types.ContentBlock{
+			&types.ContentBlockMemberToolResult{
+				Value: types.ToolResultBlock{
+					ToolUseId: aws.String(toolUseID),
+					Status:    types.ToolResultStatusSuccess,
+					Content:   content,
+				},
+			},
+		},
+	}
+}
+
+func toolCall(ctx context.Context, tools estellm.ToolSet, toolUseID string, toolName string, input any) (types.Message, error) {
+	for _, tool := range tools {
+		if NormalizeToolName(tool.Name()) == toolName {
+			w := estellm.NewBatchResponseWriter()
+			if err := tool.Call(ctx, input, w); err != nil {
+				return newToolResultWithError(toolUseID, err), nil
+			}
+			return newToolResultWithResponse(toolUseID, w.Response()), nil
+		}
+	}
+	return types.Message{}, fmt.Errorf("tool not found: %s", toolName)
 }
 
 func mergeContentBlock(a, b types.ContentBlock) types.ContentBlock {
@@ -323,7 +521,7 @@ func processMessageStart(_ context.Context, v *types.ConverseStreamOutputMemberM
 	return nil
 }
 
-func processMessageStop(_ context.Context, v *types.ConverseStreamOutputMemberMessageStop, w estellm.ResponseWriter) error {
+func processMessageStop(_ context.Context, v *types.ConverseStreamOutputMemberMessageStop, w estellm.ResponseWriter) (bool, error) {
 	bs, err := json.Marshal(v.Value.AdditionalModelResponseFields)
 	if err != nil {
 		bs = []byte("{}")
@@ -334,7 +532,7 @@ func processMessageStop(_ context.Context, v *types.ConverseStreamOutputMemberMe
 	case types.StopReasonMaxTokens:
 		w.Finish(estellm.FinishReasonMaxTokens, string(bs))
 	case types.StopReasonToolUse:
-		return errors.New("tool use not implemented")
+		return true, nil
 	case types.StopReasonStopSequence:
 		w.Finish(estellm.FinishReasonStopSequence, string(bs))
 	case types.StopReasonGuardrailIntervened:
@@ -342,14 +540,15 @@ func processMessageStop(_ context.Context, v *types.ConverseStreamOutputMemberMe
 	case types.StopReasonContentFiltered:
 		w.Finish(estellm.FinishReasonContentFiltered, string(bs))
 	default:
-		return fmt.Errorf("unsupported stop reason: %s", v.Value.StopReason)
+		return false, fmt.Errorf("unsupported stop reason: %s", v.Value.StopReason)
 	}
-	return nil
+	return false, nil
 }
 
-func processContentBlockStart(ctx context.Context, v *types.ConverseStreamOutputMemberContentBlockStart, w estellm.ResponseWriter) (types.ContentBlock, error) {
+func processContentBlockStart(ctx context.Context, v *types.ConverseStreamOutputMemberContentBlockStart, w estellm.ResponseWriter, toolInputBuilder *bytes.Buffer) (types.ContentBlock, error) {
 	switch v := v.Value.Start.(type) {
 	case *types.ContentBlockStartMemberToolUse:
+		toolInputBuilder.Reset()
 		return &types.ContentBlockMemberToolUse{
 			Value: types.ToolUseBlock{
 				Name:      v.Value.Name,
@@ -362,7 +561,7 @@ func processContentBlockStart(ctx context.Context, v *types.ConverseStreamOutput
 	}
 }
 
-func processContentBlockDelta(_ context.Context, v *types.ConverseStreamOutputMemberContentBlockDelta, w estellm.ResponseWriter) (types.ContentBlock, error) {
+func processContentBlockDelta(ctx context.Context, v *types.ConverseStreamOutputMemberContentBlockDelta, w estellm.ResponseWriter, toolInputBuilder *bytes.Buffer) (types.ContentBlock, error) {
 	switch v := v.Value.Delta.(type) {
 	case *types.ContentBlockDeltaMemberText:
 		if err := w.WritePart(estellm.TextPart(v.Value)); err != nil {
@@ -402,14 +601,9 @@ func processContentBlockDelta(_ context.Context, v *types.ConverseStreamOutputMe
 			return nil, nil
 		}
 	case *types.ContentBlockDeltaMemberToolUse:
-		var m map[string]any
-		if err := json.Unmarshal([]byte(*v.Value.Input), &m); err != nil {
-			return nil, fmt.Errorf("unmarshal tool input: %w", err)
-		}
+		toolInputBuilder.WriteString(*v.Value.Input)
 		return &types.ContentBlockMemberToolUse{
-			Value: types.ToolUseBlock{
-				Input: document.NewLazyDocument(m),
-			},
+			Value: types.ToolUseBlock{},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported content block type: %T", v)

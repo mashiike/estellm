@@ -94,6 +94,7 @@ func (cfg *Config) Clone() *Config {
 		Tools:            slices.Clone(cfg.Tools),
 		RequestMetadata:  cfg.RequestMetadata.Clone(),
 		ResponseMetadata: cfg.ResponseMetadata.Clone(),
+		Description:      cfg.Description,
 	}
 }
 
