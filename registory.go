@@ -33,13 +33,8 @@ var (
 	ErrAgentNotFound          = errors.New("agent not found")
 )
 
-type registorOptions struct {
-	templateFuncs template.FuncMap
-}
-
-type RegistorOption func(*registorOptions)
-
-func (r *Registry) Register(name string, f NewAgentFunc, opts ...RegistorOption) error {
+// Register registers a new agent.
+func (r *Registry) Register(name string, f NewAgentFunc) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if name == "" {
@@ -49,15 +44,24 @@ func (r *Registry) Register(name string, f NewAgentFunc, opts ...RegistorOption)
 		return ErrAgentAlreadyRegistered
 	}
 	r.newFuncs[name] = f
-	var options registorOptions
-	for _, o := range opts {
-		o(&options)
+	return nil
+}
+
+func (r *Registry) SetTemplateFuncs(name string, funcs template.FuncMap) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if name == "" {
+		return ErrAgentTypeEmpty
 	}
-	if options.templateFuncs != nil {
-		if r.templateFuncs == nil {
-			r.templateFuncs = make(map[string]template.FuncMap)
-		}
-		r.templateFuncs[name] = options.templateFuncs
+	if _, ok := r.newFuncs[name]; !ok {
+		return ErrAgentNotFound
+	}
+	if r.templateFuncs == nil {
+		r.templateFuncs = make(map[string]template.FuncMap)
+	}
+	r.templateFuncs[name] = funcs
+	if _, err := mergeFuncMaps(r.templateFuncs); err != nil {
+		return err
 	}
 	return nil
 }
@@ -89,9 +93,14 @@ func (r *Registry) NewAgent(ctx context.Context, p *Prompt) (Agent, error) {
 	return f(ctx, p)
 }
 
-// Register registers a new agent. to the default registry.
-func Register(name string, f NewAgentFunc) error {
+// RegisterAgent registers a new agent. to the default registry.
+func RegisterAgent(name string, f NewAgentFunc) error {
 	return defaultRegistory.Register(name, f)
+}
+
+// SetAgentTemplateFuncs sets template functions for the agent type.
+func SetAgentTemplateFuncs(name string, funcs template.FuncMap) error {
+	return defaultRegistory.SetTemplateFuncs(name, funcs)
 }
 
 // DefaultRegistory returns the default registry.

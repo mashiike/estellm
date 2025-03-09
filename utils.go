@@ -3,7 +3,10 @@ package estellm
 import (
 	"cmp"
 	"errors"
+	"fmt"
+	"reflect"
 	"slices"
+	"text/template"
 )
 
 func ptr[T any](v T) *T {
@@ -166,4 +169,29 @@ func reverseDependency(dependents map[string][]string) map[string][]string {
 
 func findSourceNodes(graph map[string][]string) []string {
 	return findSinkNodes(reverseDependency(graph))
+}
+
+func mergeFuncMaps(funcMaps map[string]template.FuncMap) (template.FuncMap, error) {
+	merged := template.FuncMap{}
+
+	for _, funcMap := range funcMaps {
+		for name, fn := range funcMap {
+			// check if function name conflict
+			if existingFn, exists := merged[name]; exists {
+				if !isSameSignature(existingFn, fn) {
+					return nil, fmt.Errorf("function name conflict: %s has different signatures", name)
+				}
+			}
+			merged[name] = fn
+		}
+	}
+
+	return merged, nil
+}
+
+func isSameSignature(fn1, fn2 interface{}) bool {
+	t1 := reflect.TypeOf(fn1)
+	t2 := reflect.TypeOf(fn2)
+
+	return t1 != nil && t2 != nil && t1.Kind() == reflect.Func && t1 == t2
 }

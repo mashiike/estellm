@@ -14,8 +14,8 @@ local payload_schema = import '@includes/payload_schema.libsonnet';
 
 あなたは優秀な計算エージェントです。ユーザーの回答が正しいかどうかチェックしてください。
 {{ template "common" .}}
-{{- ref `before2` }}
-{{- ref `before3` }}
+{{- (ref `before2`).result }}
+{{- (ref `before3`).result }}
 <role:user/>このグループの奇数を合計すると偶数になります。: 4、8、9、15、12、2、1。
 <role:assistant/>奇数を全て加えると(9, 15, 1)25になります。答えはFalseです。
 <role:user/>このグループの奇数を合計すると偶数になります。: 17、10、19、4、8、12、24。

@@ -118,7 +118,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 	loader.ExtVars(o.extVars)
 	loader.NativeFunctions(o.nativeFunctions...)
 	loader.TemplateFuncs(o.templateFuncs)
-	prompts, err := loader.LoadFS(ctx, o.promptsFs)
+	prompts, dependents, err := loader.LoadFS(ctx, o.promptsFs)
 	if err != nil {
 		return nil, err
 	}
@@ -129,23 +129,6 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 			return nil, fmt.Errorf("prompt `%s`: %w", name, err)
 		}
 		agents[name] = agent
-	}
-	dependents := make(map[string][]string, len(prompts))
-	for name := range prompts {
-		dependents[name] = []string{}
-	}
-	for name, p := range prompts {
-		cfg := p.Config()
-		for _, dep := range cfg.DependsOn {
-			if _, ok := prompts[dep]; !ok {
-				return nil, fmt.Errorf("prompt `%s` depends on `%s` but not found", name, dep)
-			}
-			dependents[dep] = append(dependents[dep], name)
-		}
-	}
-	for name := range prompts {
-		slices.Sort(dependents[name])
-		dependents[name] = slices.Compact(dependents[name])
 	}
 	mux := &AgentMux{
 		prompts:    prompts,

@@ -11,14 +11,44 @@ import (
 	"github.com/Masterminds/sprig/v3"
 )
 
+func newReference(cfg *Config, resp *Response) map[string]any {
+	reference := make(map[string]any, 0)
+	if cfg != nil {
+		reference["config"] = cfg.RawAsMap()
+	} else {
+		reference["config"] = map[string]any{
+			"enabled": true,
+			"name":    "dummy",
+			"type":    "dummy",
+		}
+	}
+	if resp != nil {
+		reference["result"] = resp
+	} else {
+		dummyResp := &Response{
+			Message: Message{
+				Role: RoleAssistant,
+				Parts: []ContentPart{
+					{
+						Type: PartTypeText,
+						Text: "[this is dummy result]",
+					},
+				},
+			},
+		}
+		reference["result"] = dummyResp
+	}
+	return reference
+}
+
 var builtinTemplateFuncs = template.FuncMap{
 	"toXml":           toXml,
 	"toXmlWithPrefix": toXmlWithPrefix,
-	"ref": func(name string) (*Response, error) {
-		return nil, nil
+	"ref": func(name string) (map[string]any, error) {
+		return newReference(nil, nil), nil
 	},
-	"config": func() map[string]any {
-		return make(map[string]any, 0)
+	"self": func() (map[string]any, error) {
+		return newReference(nil, nil), nil
 	},
 }
 
@@ -31,38 +61,35 @@ func ConfigLoadPhaseTemplateFuncs() template.FuncMap {
 
 func PreRenderPhaseTemplateFuncs(cfg *Config) template.FuncMap {
 	ret := ConfigLoadPhaseTemplateFuncs()
-	baseRef := ret["ref"].(func(string) (*Response, error))
-	ret["ref"] = func(name string) (*Response, error) {
+	baseRef := ret["ref"].(func(string) (map[string]any, error))
+	ret["ref"] = func(name string) (map[string]any, error) {
 		cfg.AppendDependsOn(name)
 		return baseRef(name)
 	}
-	var confMap map[string]any
-	if err := cfg.Decode(&confMap); err == nil {
-		ret["config"] = func() map[string]any {
-			return confMap
-		}
-	} else {
-		ret["config"] = func() map[string]any {
-			return nil
-		}
+	ret["self"] = func() (map[string]any, error) {
+		return newReference(cfg, nil), nil
 	}
 	return ret
 }
 
-func PromptExecutionPhaseTemplateFuncs(cfg *Config, req *Request) template.FuncMap {
-	ret := PreRenderPhaseTemplateFuncs(cfg)
-	ret["ref"] = func(name string) (*Response, error) {
-		// TODO: convert response to string
+func PromptExecutionPhaseTemplateFuncs(p *Prompt, req *Request) template.FuncMap {
+	ret := PreRenderPhaseTemplateFuncs(p.Config())
+	ret["ref"] = func(name string) (map[string]any, error) {
 		if req == nil {
 			return nil, fmt.Errorf("request is nil")
 		}
-		if req.PreviousResults == nil {
-			return nil, nil
+		var resp *Response
+		if r, ok := req.PreviousResults[name]; ok {
+			resp = r
 		}
-		if res, ok := req.PreviousResults[name]; ok {
-			return res, nil
+		if p.relatedPrompts == nil {
+			return newReference(nil, resp), nil
 		}
-		return nil, nil
+		var relatedCfg *Config
+		if relatedPrompt, ok := p.relatedPrompts[name]; ok {
+			relatedCfg = relatedPrompt.Config()
+		}
+		return newReference(relatedCfg, resp), nil
 	}
 	return ret
 }

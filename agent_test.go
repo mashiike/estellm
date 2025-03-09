@@ -33,13 +33,13 @@ func TestNewAgentMux__Cycle(t *testing.T) {
 	}{
 		{
 			name:     "cycle1",
-			includes: "testdata/includes",
-			prompts:  "testdata/cycle1",
+			includes: "testdata/cycle1/includes",
+			prompts:  "testdata/cycle1/prompts",
 		},
 		{
 			name:     "cycle2",
-			includes: "testdata/includes",
-			prompts:  "testdata/cycle2",
+			includes: "testdata/cycle2/includes",
+			prompts:  "testdata/cycle2/prompts",
 		},
 	}
 	for _, c := range cases {
@@ -93,20 +93,20 @@ func TestNewAgentMux__Execute(t *testing.T) {
 	}{
 		{
 			name:     "simple",
-			includes: "testdata/includes",
-			prompts:  "testdata/simple",
+			includes: "testdata/simple/includes",
+			prompts:  "testdata/simple/prompts",
 			start:    "start",
 		},
 		{
 			name:     "simple_start_task_b",
-			includes: "testdata/includes",
-			prompts:  "testdata/simple",
+			includes: "testdata/simple/includes",
+			prompts:  "testdata/simple/prompts",
 			start:    "task_b",
 		},
 		{
 			name:        "simple_include_deps",
-			includes:    "testdata/includes",
-			prompts:     "testdata/simple",
+			includes:    "testdata/simple/includes",
+			prompts:     "testdata/simple/prompts",
 			start:       "task_b",
 			includeDeps: true,
 		},

@@ -2,8 +2,10 @@ package estellm_test
 
 import (
 	"context"
+	"maps"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/mashiike/estellm"
@@ -13,15 +15,21 @@ import (
 
 func TestLoader(t *testing.T) {
 	loader := estellm.NewLoader()
-	loader.Includes(os.DirFS("testdata/includes"))
+	loader.Includes(os.DirFS("testdata/loadertest/includes"))
 	seed := [32]byte{0}
 	gen := estellm.NewSchemaValueGenerator(rand.New(rand.NewChaCha8(seed)))
 	loader.ValueGenerator(gen)
 	ctx := context.Background()
 
-	prompts, err := loader.LoadFS(ctx, os.DirFS("testdata/prompts"))
+	prompts, _, err := loader.LoadFS(ctx, os.DirFS("testdata/loadertest/prompts"))
 	require.NoError(t, err)
-	require.Len(t, prompts, 2)
+	require.ElementsMatch(t, []string{
+		"cot",
+		"hoge",
+		"before1",
+		"before2",
+		"before3",
+	}, slices.Collect(maps.Keys(prompts)))
 	t.Run("cot", func(t *testing.T) {
 		p := prompts["cot"]
 		cfg := p.Config()
@@ -53,6 +61,32 @@ func TestLoader(t *testing.T) {
 		}
 		req, err = estellm.NewRequest("cot", data)
 		require.NoError(t, err)
+		req.PreviousResults = map[string]*estellm.Response{
+			"before1": {
+				Message: estellm.Message{
+					Role: estellm.RoleAssistant,
+					Parts: []estellm.ContentPart{
+						estellm.TextPart("This is before1 message."),
+					},
+				},
+			},
+			"before2": {
+				Message: estellm.Message{
+					Role: estellm.RoleAssistant,
+					Parts: []estellm.ContentPart{
+						estellm.TextPart("This is before2 message."),
+					},
+				},
+			},
+			"before3": {
+				Message: estellm.Message{
+					Role: estellm.RoleAssistant,
+					Parts: []estellm.ContentPart{
+						estellm.TextPart("This is before3 message."),
+					},
+				},
+			},
+		}
 		renderd, err := p.Render(ctx, req)
 		require.NoError(t, err)
 		g.Assert(t, "rendered", []byte(renderd))

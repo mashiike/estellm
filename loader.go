@@ -2,11 +2,11 @@ package estellm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"text/template"
@@ -94,7 +94,7 @@ func (l *Loader) PromptPathPatterns(patterns []string) {
 	l.resetPrepare()
 }
 
-func (l *Loader) load(ctx context.Context, fsys fs.FS, promptPath string) (*Prompt, error) {
+func (l *Loader) load(_ context.Context, fsys fs.FS, promptPath string) (*Prompt, error) {
 	tmpl, err := l.parseTemplate(fsys, promptPath)
 	if err != nil {
 		return nil, fmt.Errorf("parse template: %w", err)
@@ -121,26 +121,62 @@ func (l *Loader) Load(ctx context.Context, fsys fs.FS, promptPath string) (*Prom
 	return l.load(ctx, fsys, promptPath)
 }
 
-func (l *Loader) LoadFS(ctx context.Context, fsys fs.FS) (map[string]*Prompt, error) {
+func (l *Loader) LoadFS(ctx context.Context, fsys fs.FS) (map[string]*Prompt, map[string][]string, error) {
 	l.importer.Register("prompts", fsys)
 	l.importer.ClearCache()
 	prompts := make(map[string]*Prompt, 1)
 	paths, err := recursiveGlob(fsys, l.patterns...)
 	if err != nil {
-		return nil, fmt.Errorf("walk prompts: %w", err)
+		return nil, nil, fmt.Errorf("walk prompts: %w", err)
 	}
 	for _, path := range paths {
 		p, err := l.load(ctx, fsys, path)
 		if err != nil {
-			return nil, fmt.Errorf("load prompt for `%s`: %w", path, err)
+			return nil, nil, fmt.Errorf("load prompt for `%s`: %w", path, err)
 		}
 		name := p.Name()
 		if _, ok := prompts[name]; ok {
-			return nil, fmt.Errorf("duplicate prompt name: %s", name)
+			return nil, nil, fmt.Errorf("duplicate prompt name: %s", name)
 		}
 		prompts[name] = p
 	}
-	return prompts, nil
+	dependents, err := l.checkDependencies(prompts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("check dependencies: %w", err)
+	}
+	return prompts, dependents, nil
+}
+
+func (l *Loader) checkDependencies(prompts map[string]*Prompt) (map[string][]string, error) {
+	dependents := make(map[string][]string, len(prompts))
+	for name := range prompts {
+		dependents[name] = []string{}
+	}
+	for name, p := range prompts {
+		cfg := p.Config()
+		for _, dep := range cfg.DependsOn {
+			if _, ok := prompts[dep]; !ok {
+				return nil, fmt.Errorf("prompt `%s` depends on `%s` but not found", name, dep)
+			}
+			dependents[dep] = append(dependents[dep], name)
+		}
+	}
+	for name := range prompts {
+		slices.Sort(dependents[name])
+		dependents[name] = slices.Compact(dependents[name])
+	}
+	for name, deps := range dependents {
+		p := prompts[name]
+		relatedPrompts := make(map[string]*Prompt, len(deps))
+		for _, dep := range deps {
+			relatedPrompts[dep] = prompts[dep]
+		}
+		for _, dep := range p.Config().DependsOn {
+			relatedPrompts[dep] = prompts[dep]
+		}
+		p.relatedPrompts = relatedPrompts
+	}
+	return dependents, nil
 }
 
 func (l *Loader) preRender(tmpl *template.Template, cfg *Config) (string, error) {
@@ -171,27 +207,7 @@ func (l *Loader) parseConfig(tmpl *template.Template, promptPath string) (*Confi
 	}
 	raw := buf.String()
 	vm := l.makeVM()
-	jsonStr, err := vm.EvaluateAnonymousSnippet(promptPath, raw)
-	if err != nil {
-		return nil, fmt.Errorf("evaluate config: %w", err)
-	}
-	var config Config
-	if err := json.Unmarshal([]byte(jsonStr), &config); err != nil {
-		return nil, fmt.Errorf("unmarshal config: %w", err)
-	}
-	if config.Name == "" {
-		config.Name = strings.TrimSuffix(filepath.Base(promptPath), filepath.Ext(promptPath))
-	}
-	if config.Type == "" {
-		return nil, fmt.Errorf("prompt `%s`: type is empty", config.Name)
-	}
-	if config.Enabled == nil {
-		config.Enabled = ptr(true)
-	}
-	config.PromptPath = promptPath
-	config.Raw = raw
-	config.vm = vm
-	return &config, nil
+	return newConfig(vm, raw, promptPath)
 }
 
 func (l *Loader) parseTemplate(fsys fs.FS, promptPath string) (*template.Template, error) {

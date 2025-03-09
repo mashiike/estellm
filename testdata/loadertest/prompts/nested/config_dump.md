@@ -10,8 +10,8 @@
 }
 {{ end }}
 
-{{  get (config) `key1` }}
-{{  get (config) `key2` }}
+{{  get (self.config) `key1` }}
+{{  get (self.config) `key2` }}
 
 {{ define "dummy_block" }}
 {{ end }}

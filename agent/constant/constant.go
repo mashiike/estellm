@@ -12,7 +12,7 @@ const (
 )
 
 func init() {
-	err := estellm.Register(AgentName, NewAgent)
+	err := estellm.RegisterAgent(AgentName, NewAgent)
 	if err != nil {
 		panic(fmt.Sprintf("failed to register agent %s: %v", AgentName, err))
 	}

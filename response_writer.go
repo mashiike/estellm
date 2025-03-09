@@ -1,8 +1,9 @@
 package estellm
 
 import (
-	"encoding/json"
+	"fmt"
 	"slices"
+	"strings"
 )
 
 //go:generate go tool enumer -type=FinishReason -json -trimprefix=FinishReason  -transform=snake -output=finish_reason.gen.go
@@ -64,11 +65,15 @@ func (r *Response) String() string {
 	if r == nil {
 		return "[no response]"
 	}
-	bs, err := json.MarshalIndent(r, "", "  ")
-	if err != nil {
-		return "[error encoding response]"
+	var sb strings.Builder
+	enc := NewMessageEncoder(&sb)
+	for _, part := range r.Message.Parts {
+		if err := enc.EncodeContentPart(part); err != nil {
+			return "[error encoding response]"
+		}
 	}
-	return string(bs)
+	fmt.Fprintln(&sb)
+	return sb.String()
 }
 
 type BatchResponseWriter struct {

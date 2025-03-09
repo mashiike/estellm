@@ -2,33 +2,20 @@ package estellm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"maps"
 	"path"
 	"slices"
 	"strings"
 	"text/template"
 
-	"github.com/google/go-jsonnet"
 	"github.com/xeipuuv/gojsonschema"
 )
 
 type Prompt struct {
-	cfg         *Config
-	tmpl        *template.Template
-	preRendered string
-}
-
-type Config struct {
-	Raw           string         `json:"-"`
-	PromptPath    string         `json:"-"`
-	Enabled       *bool          `json:"enabled"`
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	DependsOn     []string       `json:"depends_on"`
-	PayloadSchema map[string]any `json:"payload_schema,omitempty"`
-	vm            *jsonnet.VM    `json:"-"`
+	cfg            *Config
+	tmpl           *template.Template
+	preRendered    string
+	relatedPrompts map[string]*Prompt
 }
 
 func (p *Prompt) Name() string {
@@ -36,36 +23,7 @@ func (p *Prompt) Name() string {
 }
 
 func (p *Prompt) Config() *Config {
-	return &Config{
-		Raw:           p.cfg.Raw,
-		vm:            p.cfg.vm,
-		PromptPath:    p.cfg.PromptPath,
-		Name:          p.cfg.Name,
-		Type:          p.cfg.Type,
-		DependsOn:     slices.Clone(p.cfg.DependsOn),
-		PayloadSchema: maps.Clone(p.cfg.PayloadSchema),
-	}
-}
-
-func (cfg *Config) AppendDependsOn(dependsOn ...string) {
-	cfg.DependsOn = append(cfg.DependsOn, dependsOn...)
-	slices.Sort(cfg.DependsOn)
-	cfg.DependsOn = slices.Compact(cfg.DependsOn)
-}
-
-func (cfg *Config) Decode(v any) error {
-	vm := cfg.vm
-	if vm == nil {
-		vm = jsonnet.MakeVM()
-	}
-	jsonStr, err := vm.EvaluateAnonymousSnippet(cfg.PromptPath+".jsonnet", cfg.Raw)
-	if err != nil {
-		return fmt.Errorf("evaluate jsonnet: %w", err)
-	}
-	if err := json.Unmarshal([]byte(jsonStr), v); err != nil {
-		return fmt.Errorf("unmarshal config: %w", err)
-	}
-	return nil
+	return p.cfg.Clone()
 }
 
 func (p *Prompt) PreRendered() string {
@@ -117,7 +75,7 @@ func (p *Prompt) RenderBlock(ctx context.Context, blockName string, req *Request
 	if tmpl == nil {
 		return "", fmt.Errorf("block name `%s`: %w", blockName, ErrTemplateBlockNotFound)
 	}
-	tmpl = tmpl.Funcs(PromptExecutionPhaseTemplateFuncs(p.cfg, req))
+	tmpl = tmpl.Funcs(PromptExecutionPhaseTemplateFuncs(p, req))
 	var buf strings.Builder
 	if err := tmpl.ExecuteTemplate(&buf, blockName, req.TemplateData()); err != nil {
 		return "", fmt.Errorf("execute template: %w", err)
@@ -141,4 +99,8 @@ func (p *Prompt) DecodeBlock(ctx context.Context, blockName string, req *Request
 	}
 	dec := NewMessageDecoder(strings.NewReader(prompt))
 	return dec.Decode()
+}
+
+func (p *Prompt) SetRelatedPrompts(prompts map[string]*Prompt) {
+	p.relatedPrompts = prompts
 }
