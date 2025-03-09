@@ -2,6 +2,8 @@ package metadata
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -36,6 +38,20 @@ func (m Metadata) Clone() Metadata {
 		clone[key] = value
 	}
 	return clone
+}
+
+func (m Metadata) Merge(other Metadata) Metadata {
+	merged := m.Clone()
+	for key, value := range other {
+		merged[key] = value
+	}
+	return merged
+}
+
+func (m Metadata) MergeInPlace(other Metadata) {
+	for key, value := range other {
+		m[key] = value
+	}
 }
 
 func (m Metadata) GetInt64(key string) (int64, bool) {
@@ -105,4 +121,38 @@ func (m Metadata) String() string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+func (m *Metadata) UnmarshalJSON(data []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if *m == nil {
+		*m = make(Metadata, len(raw))
+	}
+	for key, value := range raw {
+		canonicalKey := textproto.CanonicalMIMEHeaderKey(key)
+		switch v := value.(type) {
+		case string:
+			if bs, err := base64.StdEncoding.DecodeString(v); err == nil {
+				(*m)[canonicalKey] = bs
+			} else {
+				(*m)[canonicalKey] = v
+			}
+		case float64:
+			if float64(int64(v)) == v {
+				(*m)[canonicalKey] = int64(v)
+			} else {
+				(*m)[canonicalKey] = v
+			}
+		case bool:
+			(*m)[canonicalKey] = v
+		case int:
+			(*m)[canonicalKey] = int64(v)
+		default:
+			return errors.New("unsupported value type")
+		}
+	}
+	return nil
 }

@@ -3,6 +3,7 @@ package estellm_test
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"strings"
 	"testing"
@@ -41,6 +42,11 @@ func TestNewAgentMux__Cycle(t *testing.T) {
 			includes: "testdata/cycle2/includes",
 			prompts:  "testdata/cycle2/prompts",
 		},
+		{
+			name:     "cycle3",
+			includes: "testdata/cycle3/includes",
+			prompts:  "testdata/cycle3/prompts",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -60,10 +66,19 @@ func TestNewAgentMux__Cycle(t *testing.T) {
 }
 
 func TestNewAgentMux__Execute(t *testing.T) {
+	seed := [32]byte{1}
+	gen := estellm.NewSchemaValueGenerator(rand.New(rand.NewChaCha8(seed)))
 	var executionHistory strings.Builder
 	reg := estellm.NewRegistry()
 	reg.Register("test_agent", estellm.NewAgentFunc(func(ctx context.Context, p *estellm.Prompt) (estellm.Agent, error) {
 		return estellm.AgentFunc(func(ctx context.Context, req *estellm.Request, rw estellm.ResponseWriter) error {
+			for _, tool := range req.Tools {
+				fmt.Fprintf(&executionHistory, "call tool `%s` \n", tool.Name())
+				toolPayload, err := gen.Generate(tool.InputSchema())
+				require.NoError(t, err)
+				err = tool.Call(ctx, toolPayload, rw)
+				require.NoError(t, err)
+			}
 			w := estellm.ResponseWriterToWriter(rw)
 			fmt.Fprintf(w, "execute %s \n", p.Name())
 			fmt.Fprintf(&executionHistory, "execute %s \n", p.Name())
@@ -98,17 +113,25 @@ func TestNewAgentMux__Execute(t *testing.T) {
 			start:    "start",
 		},
 		{
-			name:     "simple_start_task_b",
-			includes: "testdata/simple/includes",
-			prompts:  "testdata/simple/prompts",
-			start:    "task_b",
+			name:          "simple_start_task_b",
+			includes:      "testdata/simple/includes",
+			prompts:       "testdata/simple/prompts",
+			start:         "task_b",
+			skipStructure: true,
 		},
 		{
-			name:        "simple_include_deps",
-			includes:    "testdata/simple/includes",
-			prompts:     "testdata/simple/prompts",
-			start:       "task_b",
-			includeDeps: true,
+			name:          "simple_include_deps",
+			includes:      "testdata/simple/includes",
+			prompts:       "testdata/simple/prompts",
+			start:         "task_b",
+			includeDeps:   true,
+			skipStructure: true,
+		},
+		{
+			name:     "tools",
+			includes: "testdata/toolcall/includes",
+			prompts:  "testdata/toolcall/prompts",
+			start:    "main",
 		},
 	}
 	for _, c := range cases {

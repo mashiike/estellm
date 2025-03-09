@@ -28,13 +28,14 @@ func (f AgentFunc) Execute(ctx context.Context, req *Request, w ResponseWriter) 
 }
 
 type AgentMux struct {
-	mu         sync.RWMutex
-	prompts    map[string]*Prompt
-	agents     map[string]Agent
-	dependents map[string][]string
-	isCycle    bool
-	validate   func() error
-	logger     *slog.Logger
+	mu               sync.RWMutex
+	prompts          map[string]*Prompt
+	agents           map[string]Agent
+	dependents       map[string][]string
+	toolsDepenedents map[string][]string
+	isCycle          bool
+	validate         func() error
+	logger           *slog.Logger
 }
 
 type newAgentMuxOptions struct {
@@ -132,6 +133,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 	if err != nil {
 		return nil, err
 	}
+	toolsDepenedents := make(map[string][]string, len(dependents))
 	agents := make(map[string]Agent, len(prompts))
 	for name, p := range prompts {
 		agent, err := reg.NewAgent(ctx, p)
@@ -139,12 +141,19 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 			return nil, fmt.Errorf("prompt `%s`: %w", name, err)
 		}
 		agents[name] = agent
+		toolsDepenedents[name] = p.Config().Tools
+		for _, tool := range toolsDepenedents[name] {
+			if _, ok := dependents[tool]; !ok {
+				return nil, fmt.Errorf("prompt `%s`: refarence `%s` as tool, but not found", name, tool)
+			}
+		}
 	}
 	mux := &AgentMux{
-		prompts:    prompts,
-		agents:     agents,
-		dependents: dependents,
-		logger:     o.logger,
+		prompts:          prompts,
+		agents:           agents,
+		dependents:       dependents,
+		logger:           o.logger,
+		toolsDepenedents: toolsDepenedents,
 	}
 	mux.validate = sync.OnceValue(mux.validateImpl)
 	return mux, nil
@@ -155,7 +164,18 @@ func (mux *AgentMux) Validate() error {
 }
 
 func (mux *AgentMux) validateImpl() error {
-	if _, err := topologicalSort(mux.dependents); err != nil {
+	merged := make(map[string][]string, len(mux.dependents))
+	for name, deps := range mux.dependents {
+		merged[name] = slices.Clone(deps)
+	}
+	for name, tools := range mux.toolsDepenedents {
+		merged[name] = append(merged[name], tools...)
+	}
+	for name, deps := range merged {
+		slices.Sort(deps)
+		merged[name] = slices.Compact(deps)
+	}
+	if _, err := topologicalSort(merged); err != nil {
 		mux.isCycle = true
 		return fmt.Errorf("topological sort: %w", err)
 	}
@@ -178,6 +198,9 @@ func (mux *AgentMux) ToMarkdown() string {
 		deps := mux.dependents[node]
 		for _, dep := range deps {
 			sb.WriteString(fmt.Sprintf("    %s --> %s\n", nodesAlias[node], nodesAlias[dep]))
+		}
+		for _, tool := range mux.toolsDepenedents[node] {
+			sb.WriteString(fmt.Sprintf("    %s -.->|tool_call| %s\n", nodesAlias[node], nodesAlias[tool]))
 		}
 	}
 	sb.WriteString("```\n")
@@ -220,36 +243,79 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 			if done[node] {
 				continue
 			}
-			agent, ok := mux.agents[node]
-			if !ok {
-				return fmt.Errorf("agent `%s` not found", node)
+			if err := mux.executeOne(ctx, node, req, w, previousResults, sinkNodes); err != nil {
+				return err
 			}
-			cloned := req.Clone()
-			cloned.PreviousResults = make(map[string]*Response, len(previousResults))
-			dependsOn, ok := mux.dependents[node]
-			if !ok {
-				dependsOn = []string{}
-			}
-			for _, dep := range dependsOn {
-				if resp, ok := previousResults[dep]; ok {
-					cloned.PreviousResults[dep] = resp
-				}
-			}
-			if slices.Contains(sinkNodes, node) {
-				if err := agent.Execute(ctx, cloned, w); err != nil {
-					return fmt.Errorf("execute `%s`: %w", node, err)
-				}
-				done[node] = true
-				continue
-			}
-			batchWriter := NewBatchResponseWriter()
-			if err := agent.Execute(ctx, cloned, batchWriter); err != nil {
-				return fmt.Errorf("execute `%s`: %w", node, err)
-			}
-			previousResults[node] = batchWriter.Response()
+			done[node] = true
 		}
 	}
 	return nil
+}
+
+func (mux *AgentMux) executeOne(ctx context.Context, node string, req *Request, w ResponseWriter, previousResults map[string]*Response, sinkNodes []string) error {
+	agent, ok := mux.agents[node]
+	if !ok {
+		return fmt.Errorf("agent `%s` not found", node)
+	}
+	p, ok := mux.prompts[node]
+	if !ok {
+		return fmt.Errorf("prompt `%s` not found", node)
+	}
+	cfg := p.Config()
+	if !*cfg.Enabled {
+		return fmt.Errorf("prompt `%s` is disabled", node)
+	}
+	cloned := req.Clone()
+	cloned = mux.refineRequest(cfg, cloned)
+	cloned.PreviousResults = make(map[string]*Response, len(previousResults))
+	dependsOn, ok := mux.dependents[node]
+	if !ok {
+		dependsOn = []string{}
+	}
+	for _, dep := range dependsOn {
+		if resp, ok := previousResults[dep]; ok {
+			cloned.PreviousResults[dep] = resp
+		}
+	}
+	tools := make(ToolSet, 0, len(cfg.Tools))
+	for _, tool := range cfg.Tools {
+		toolPrompt, ok := mux.prompts[tool]
+		if !ok {
+			continue
+		}
+		toolCfg := toolPrompt.Config()
+		if !*toolCfg.Enabled {
+			continue
+		}
+		tools = tools.Append(NewAgentTool(
+			tool,
+			toolCfg.Description,
+			toolCfg.PayloadSchema,
+			mux,
+		))
+	}
+	cloned.Tools = cloned.Tools.Append(tools...)
+	w.Metadata().MergeInPlace(cfg.ResponseMetadata)
+	if slices.Contains(sinkNodes, node) {
+		if err := agent.Execute(ctx, cloned, w); err != nil {
+			return fmt.Errorf("execute `%s`: %w", node, err)
+		}
+		return nil
+	}
+	batchWriter := NewBatchResponseWriter()
+	if err := agent.Execute(ctx, cloned, batchWriter); err != nil {
+		return fmt.Errorf("execute `%s`: %w", node, err)
+	}
+	previousResults[node] = batchWriter.Response()
+	return nil
+}
+
+func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
+	if req == nil {
+		return nil
+	}
+	req.Metadata = req.Metadata.Merge(cfg.RequestMetadata)
+	return req
 }
 
 func (mux *AgentMux) Render(ctx context.Context, req *Request) (string, error) {
@@ -257,7 +323,7 @@ func (mux *AgentMux) Render(ctx context.Context, req *Request) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("agent `%s` not found", req.Name)
 	}
-	return p.Render(ctx, req)
+	return p.Render(ctx, mux.refineRequest(p.Config(), req))
 }
 
 func (mux *AgentMux) RenderBlock(ctx context.Context, blockName string, req *Request) (string, error) {
@@ -268,7 +334,7 @@ func (mux *AgentMux) RenderBlock(ctx context.Context, blockName string, req *Req
 	if !slices.Contains(p.Blocks(), blockName) {
 		return "", fmt.Errorf("block `%s` not found in agent `%s`", blockName, req.Name)
 	}
-	return p.RenderBlock(ctx, blockName, req)
+	return p.RenderBlock(ctx, blockName, mux.refineRequest(p.Config(), req))
 }
 
 func (mux *AgentMux) RenderConfig(ctx context.Context, name string, isJsonnet bool) (string, error) {

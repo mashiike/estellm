@@ -8,6 +8,7 @@ type Request struct {
 	Metadata        metadata.Metadata    `json:"metadata"`
 	PreviousResults map[string]*Response `json:"previous_results,omitempty"`
 	IncludeDeps     bool                 `json:"include_deps,omitempty"`
+	Tools           ToolSet              `json:"tools,omitempty"`
 }
 
 func NewRequest(name string, payload any) (*Request, error) {

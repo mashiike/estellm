@@ -167,6 +167,12 @@ func (p *ModelProvider) GenerateText(ctx context.Context, req *estellm.GenerateT
 	if len(params) > 0 {
 		input.AdditionalModelRequestFields = document.NewLazyDocument(params)
 	}
+	if len(req.Metadata) > 0 {
+		input.RequestMetadata = make(map[string]string)
+		for _, k := range req.Metadata.Keys() {
+			input.RequestMetadata[k] = req.Metadata.GetString(k)
+		}
+	}
 	return p.generateTextSingleTurn(ctx, input, w)
 }
 

@@ -9,19 +9,24 @@ import (
 	"strings"
 
 	"github.com/google/go-jsonnet"
+	"github.com/mashiike/estellm/metadata"
 )
 
 type Config struct {
-	Raw           string         `json:"-"`
-	PromptPath    string         `json:"-"`
-	Enabled       *bool          `json:"enabled"`
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	DependsOn     []string       `json:"depends_on"`
-	PayloadSchema map[string]any `json:"payload_schema,omitempty"`
-	vm            *jsonnet.VM    `json:"-"`
-	rawMap        map[string]any `json:"-"`
-	dependents    []string       `json:"-"`
+	Raw              string            `json:"-"`
+	PromptPath       string            `json:"-"`
+	Enabled          *bool             `json:"enabled"`
+	Description      string            `json:"description"`
+	Name             string            `json:"name"`
+	Type             string            `json:"type"`
+	DependsOn        []string          `json:"depends_on"`
+	PayloadSchema    map[string]any    `json:"payload_schema,omitempty"`
+	Tools            []string          `json:"tools,omitempty"`
+	RequestMetadata  metadata.Metadata `json:"request_metadata,omitempty"`
+	ResponseMetadata metadata.Metadata `json:"response_metadata,omitempty"`
+	vm               *jsonnet.VM       `json:"-"`
+	rawMap           map[string]any    `json:"-"`
+	dependents       []string          `json:"-"`
 }
 
 func newConfig(vm *jsonnet.VM, raw, promptPath string) (*Config, error) {
@@ -76,16 +81,19 @@ func (cfg *Config) Clone() *Config {
 		return nil
 	}
 	return &Config{
-		Raw:           cfg.Raw,
-		PromptPath:    cfg.PromptPath,
-		Name:          cfg.Name,
-		Type:          cfg.Type,
-		DependsOn:     slices.Clone(cfg.DependsOn),
-		PayloadSchema: maps.Clone(cfg.PayloadSchema),
-		rawMap:        maps.Clone(cfg.rawMap),
-		vm:            cfg.vm,
-		Enabled:       ptr(*cfg.Enabled),
-		dependents:    slices.Clone(cfg.dependents),
+		Raw:              cfg.Raw,
+		PromptPath:       cfg.PromptPath,
+		Name:             cfg.Name,
+		Type:             cfg.Type,
+		DependsOn:        slices.Clone(cfg.DependsOn),
+		PayloadSchema:    maps.Clone(cfg.PayloadSchema),
+		rawMap:           maps.Clone(cfg.rawMap),
+		vm:               cfg.vm,
+		Enabled:          ptr(*cfg.Enabled),
+		dependents:       slices.Clone(cfg.dependents),
+		Tools:            slices.Clone(cfg.Tools),
+		RequestMetadata:  cfg.RequestMetadata.Clone(),
+		ResponseMetadata: cfg.ResponseMetadata.Clone(),
 	}
 }
 

@@ -1,4 +1,8 @@
 {
+  "metadata": {
+    "Key1": "value1",
+    "Key2": "value2"
+  },
   "message": {
     "role": "assistant",
     "parts": [
