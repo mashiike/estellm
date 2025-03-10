@@ -37,9 +37,8 @@ type ModelProviderManager struct {
 }
 
 var (
-	ErrModelProviderNameEmpty         = errors.New("model provider name is empty")
-	ErrModelProviderAlreadyRegistered = errors.New("model provider already registered")
-	ErrModelNotFound                  = errors.New("model not found")
+	ErrModelProviderNameEmpty = errors.New("model provider name is empty")
+	ErrModelNotFound          = errors.New("model not found")
 )
 
 func (m *ModelProviderManager) Register(name string, provider ModelProvider) error {
@@ -47,9 +46,6 @@ func (m *ModelProviderManager) Register(name string, provider ModelProvider) err
 	defer m.mu.Unlock()
 	if name == "" {
 		return ErrModelProviderNameEmpty
-	}
-	if _, ok := m.providers[name]; ok {
-		return ErrModelProviderAlreadyRegistered
 	}
 	m.providers[name] = provider
 	return nil

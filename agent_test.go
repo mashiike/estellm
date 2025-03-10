@@ -89,14 +89,15 @@ func TestNewAgentMux__Execute(t *testing.T) {
 	reg.Register("test_decision", estellm.NewAgentFunc(func(ctx context.Context, p *estellm.Prompt) (estellm.Agent, error) {
 		return estellm.AgentFunc(func(ctx context.Context, req *estellm.Request, rw estellm.ResponseWriter) error {
 			deps := p.Config().Dependents()
+			w := estellm.ResponseWriterToWriter(rw)
+			fmt.Fprintf(w, "execute %s \n", p.Name())
 			if len(deps) > 1 {
 				index := randReader.IntN(len(deps))
 				dep := deps[index]
 				fmt.Fprintf(&executionHistory, "decision %s -> %s \n", p.Name(), dep)
 				estellm.SetNextAgents(rw, dep)
+				rw.WritePart(estellm.ReasoningPart(fmt.Sprintf("decision %s -> %s", p.Name(), dep)))
 			}
-			w := estellm.ResponseWriterToWriter(rw)
-			fmt.Fprintf(w, "execute %s \n", p.Name())
 			fmt.Fprintf(&executionHistory, "execute %s \n", p.Name())
 			return nil
 		}), nil

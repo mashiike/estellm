@@ -108,6 +108,9 @@ func (w *BatchResponseWriter) WriteRole(role string) error {
 }
 
 func (w *BatchResponseWriter) WritePart(parts ...ContentPart) error {
+	if len(parts) == 0 {
+		return nil
+	}
 	if len(w.parts) == 0 {
 		w.parts = make([]ContentPart, 0, len(parts))
 		w.parts = append(w.parts, parts[0])
@@ -200,4 +203,37 @@ const (
 
 func SetNextAgents(w ResponseWriter, agents ...string) {
 	w.Metadata().SetStrings(metadataKeyNextAgents, agents)
+}
+
+type ReasoningMirrorResponseWriter struct {
+	ResponseWriter
+	mirrors []ResponseWriter
+}
+
+func NewReasoningMirrorResponseWriter(w ResponseWriter, mirrors ...ResponseWriter) *ReasoningMirrorResponseWriter {
+	return &ReasoningMirrorResponseWriter{
+		ResponseWriter: w,
+		mirrors:        mirrors,
+	}
+}
+
+func (w *ReasoningMirrorResponseWriter) WritePart(parts ...ContentPart) error {
+	if err := w.ResponseWriter.WritePart(parts...); err != nil {
+		return err
+	}
+	mirrorParts := make([]ContentPart, 0, len(parts))
+	for _, part := range parts {
+		if part.Type == PartTypeReasoning {
+			mirrorParts = append(mirrorParts, part)
+		}
+	}
+	if len(mirrorParts) == 0 {
+		return nil
+	}
+	for _, mirror := range w.mirrors {
+		if err := mirror.WritePart(mirrorParts...); err != nil {
+			return err
+		}
+	}
+	return nil
 }

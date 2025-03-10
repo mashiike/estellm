@@ -9,6 +9,7 @@ import (
 
 	//builtin agents import
 	_ "github.com/mashiike/estellm/agent/constant"
+	_ "github.com/mashiike/estellm/agent/decision"
 	_ "github.com/mashiike/estellm/agent/gentext"
 
 	//builtin providers import

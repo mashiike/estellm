@@ -42,6 +42,10 @@ func NewWithClient(client BedrockAPIClient) *ModelProvider {
 	return &ModelProvider{client: client}
 }
 
+func (p *ModelProvider) SetClilent(client BedrockAPIClient) {
+	p.client = client
+}
+
 func (p *ModelProvider) initClient() error {
 	p.init.Do(func() {
 		if p.client != nil {
@@ -280,57 +284,72 @@ func (p *ModelProvider) generateTextSingleTurn(ctx context.Context, input *bedro
 			}
 		}
 		input.Messages = append(input.Messages, msg)
-		toolUseId, toolName, toolInput, err := extructToolUse(msg)
+		toolUses, err := extructToolUse(msg)
 		if err != nil {
 			return fmt.Errorf("extract tool use: %w", err)
 		}
-		slog.DebugContext(ctx, "tool use", "tool_use_id", toolUseId, "tool_name", toolName, "input", toolInput)
-		msg, err = toolCall(ctx, tools, toolUseId, toolName, toolInput)
-		if err != nil {
-			return fmt.Errorf("tool call: %w", err)
+		slog.DebugContext(ctx, "tool use", "tool_uses", toolUses)
+		toolResultMsg := types.Message{
+			Role: types.ConversationRoleUser,
 		}
-		slog.DebugContext(ctx, "tool result", "message", msg)
-		input.Messages = append(input.Messages, msg)
+		for _, toolUse := range toolUses {
+			cb, err := toolCall(ctx, tools, toolUse.toolUseID, toolUse.toolName, toolUse.input)
+			if err != nil {
+				cb = newToolResultWithError(toolUse.toolUseID, err)
+			}
+			toolResultMsg.Content = append(toolResultMsg.Content, cb)
+		}
+		slog.DebugContext(ctx, "tool result", "message", toolResultMsg)
+		input.Messages = append(input.Messages, toolResultMsg)
 	}
 }
 
-func extructToolUse(msg types.Message) (string, string, any, error) {
+type toolUse struct {
+	toolUseID string
+	toolName  string
+	input     any
+}
+
+func extructToolUse(msg types.Message) ([]toolUse, error) {
+	toolUses := make([]toolUse, 0, len(msg.Content))
 	for _, cb := range msg.Content {
 		if cb, ok := cb.(*types.ContentBlockMemberToolUse); ok {
 			bs, err := cb.Value.Input.MarshalSmithyDocument()
 			if err != nil {
-				return "", "", nil, fmt.Errorf("marshal tool input: %w", err)
+				return nil, fmt.Errorf("marshal tool input: %w", err)
 			}
 			var input any
 			if err := json.Unmarshal(bs, &input); err != nil {
-				return "", "", nil, fmt.Errorf("unmarshal tool input: %w", err)
+				return nil, fmt.Errorf("unmarshal tool input: %w", err)
 			}
-			return *cb.Value.ToolUseId, *cb.Value.Name, input, nil
+			toolUses = append(toolUses, toolUse{
+				toolUseID: *cb.Value.ToolUseId,
+				toolName:  *cb.Value.Name,
+				input:     input,
+			})
 		}
 	}
-	return "", "", nil, errors.New("tool use not found")
+	if len(toolUses) == 0 {
+		return nil, errors.New("tool use not found")
+	}
+	return toolUses, nil
 }
 
-func newToolResultWithError(toolUseID string, err error) types.Message {
-	return types.Message{
-		Role: types.ConversationRoleUser,
-		Content: []types.ContentBlock{
-			&types.ContentBlockMemberToolResult{
-				Value: types.ToolResultBlock{
-					ToolUseId: aws.String(toolUseID),
-					Status:    types.ToolResultStatusError,
-					Content: []types.ToolResultContentBlock{
-						&types.ToolResultContentBlockMemberText{
-							Value: fmt.Sprintf("error: %s", err),
-						},
-					},
+func newToolResultWithError(toolUseID string, err error) types.ContentBlock {
+	return &types.ContentBlockMemberToolResult{
+		Value: types.ToolResultBlock{
+			ToolUseId: aws.String(toolUseID),
+			Status:    types.ToolResultStatusError,
+			Content: []types.ToolResultContentBlock{
+				&types.ToolResultContentBlockMemberText{
+					Value: fmt.Sprintf("error: %s", err),
 				},
 			},
 		},
 	}
 }
 
-func newToolResultWithResponse(toolUseID string, response *estellm.Response) types.Message {
+func newToolResultWithResponse(toolUseID string, response *estellm.Response) types.ContentBlock {
 	content := make([]types.ToolResultContentBlock, 0, len(response.Message.Parts))
 	for _, part := range response.Message.Parts {
 		switch part.Type {
@@ -395,21 +414,16 @@ func newToolResultWithResponse(toolUseID string, response *estellm.Response) typ
 			}
 		}
 	}
-	return types.Message{
-		Role: types.ConversationRoleUser,
-		Content: []types.ContentBlock{
-			&types.ContentBlockMemberToolResult{
-				Value: types.ToolResultBlock{
-					ToolUseId: aws.String(toolUseID),
-					Status:    types.ToolResultStatusSuccess,
-					Content:   content,
-				},
-			},
+	return &types.ContentBlockMemberToolResult{
+		Value: types.ToolResultBlock{
+			ToolUseId: aws.String(toolUseID),
+			Status:    types.ToolResultStatusSuccess,
+			Content:   content,
 		},
 	}
 }
 
-func toolCall(ctx context.Context, tools estellm.ToolSet, toolUseID string, toolName string, input any) (types.Message, error) {
+func toolCall(ctx context.Context, tools estellm.ToolSet, toolUseID string, toolName string, input any) (types.ContentBlock, error) {
 	for _, tool := range tools {
 		if NormalizeToolName(tool.Name()) == toolName {
 			w := estellm.NewBatchResponseWriter()
@@ -419,7 +433,7 @@ func toolCall(ctx context.Context, tools estellm.ToolSet, toolUseID string, tool
 			return newToolResultWithResponse(toolUseID, w.Response()), nil
 		}
 	}
-	return types.Message{}, fmt.Errorf("tool not found: %s", toolName)
+	return nil, fmt.Errorf("tool not found: %s", toolName)
 }
 
 func mergeContentBlock(a, b types.ContentBlock) types.ContentBlock {

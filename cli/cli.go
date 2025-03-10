@@ -26,7 +26,7 @@ type CLI struct {
 	Prompts   string            `cmd:"" help:"Prompts directory" default:"./prompts"`
 	Includes  string            `cmd:"" help:"Includes directory" default:"./includes"`
 	Exec      ExecOption        `cmd:"" help:"Execute the estellm"`
-	Rendoer   RenderOption      `cmd:"" help:"Render prompt/config the estellm"`
+	Render    RenderOption      `cmd:"" help:"Render prompt/config the estellm"`
 	Docs      DocsOptoin        `cmd:"" help:"Show agents documentation"`
 	Version   struct{}          `cmd:"" help:"Show version"`
 }
@@ -148,15 +148,15 @@ func (c *CLI) runExec(ctx context.Context, mux *estellm.AgentMux) error {
 }
 
 func (c *CLI) runRender(ctx context.Context, mux *estellm.AgentMux) error {
-	data, err := c.Rendoer.ParsePayload()
+	data, err := c.Render.ParsePayload()
 	if err != nil {
 		return fmt.Errorf("new execute input: %w", err)
 	}
-	req, err := estellm.NewRequest(c.Rendoer.PromptName, data)
+	req, err := estellm.NewRequest(c.Render.PromptName, data)
 	if err != nil {
 		return fmt.Errorf("new request: %w", err)
 	}
-	switch c.Rendoer.Target {
+	switch c.Render.Target {
 	case "":
 		prompt, err := mux.Render(ctx, req)
 		if err != nil {
@@ -165,14 +165,14 @@ func (c *CLI) runRender(ctx context.Context, mux *estellm.AgentMux) error {
 		fmt.Println(prompt)
 		return nil
 	case "config":
-		rendered, err := mux.RenderConfig(ctx, c.Rendoer.PromptName, c.Rendoer.Jsonnet)
+		rendered, err := mux.RenderConfig(ctx, c.Render.PromptName, c.Render.Jsonnet)
 		if err != nil {
 			return fmt.Errorf("render config: %w", err)
 		}
 		fmt.Println(rendered)
 		return nil
 	default:
-		rendered, err := mux.RenderBlock(ctx, c.Rendoer.Target, req)
+		rendered, err := mux.RenderBlock(ctx, c.Render.Target, req)
 		if err != nil {
 			return fmt.Errorf("render block: %w", err)
 		}
