@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"maps"
 	"path"
 	"path/filepath"
 	"slices"
@@ -175,17 +176,9 @@ func (l *Loader) checkDependencies(prompts map[string]*Prompt) (map[string][]str
 	for name := range prompts {
 		slices.Sort(dependents[name])
 		dependents[name] = slices.Compact(dependents[name])
-	}
-	for name, deps := range dependents {
-		p := prompts[name]
-		relatedPrompts := make(map[string]*Prompt, len(deps))
-		for _, dep := range deps {
-			relatedPrompts[dep] = prompts[dep]
-		}
-		for _, dep := range p.Config().DependsOn {
-			relatedPrompts[dep] = prompts[dep]
-		}
-		p.relatedPrompts = relatedPrompts
+		relatedPrompts := maps.Clone(prompts)
+		delete(relatedPrompts, name)
+		prompts[name].relatedPrompts = relatedPrompts
 	}
 	return dependents, nil
 }

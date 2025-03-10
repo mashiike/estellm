@@ -126,7 +126,7 @@ func TestPickupDAG(t *testing.T) {
 	}
 }
 
-func TestExtractSubgraph(t *testing.T) {
+func TestExtractDonwstreamSubgraph(t *testing.T) {
 	tests := []struct {
 		name     string
 		graph    map[string][]string
@@ -148,14 +148,55 @@ func TestExtractSubgraph(t *testing.T) {
 				"c": {},
 			},
 		},
+		{
+			name: "Extract Subgraph",
+			graph: map[string][]string{
+				"a": {"c"},
+				"b": {"c"},
+				"c": {},
+				"d": {"a"},
+			},
+			start: "b",
+			expected: map[string][]string{
+				"b": {"c"},
+				"c": {},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractSubgraph(tt.graph, tt.start)
+			result := extractDownstreamSubgraph(tt.graph, tt.start)
 			if !reflect.DeepEqual(result, tt.expected) {
 				t.Errorf("expected %v, got %v", tt.expected, result)
 			}
+		})
+	}
+}
+
+func TestDoubleExtruct(t *testing.T) {
+	tests := []struct {
+		name  string
+		graph map[string][]string
+		start string
+	}{
+		{
+			name: "Extract Subgraph",
+			graph: map[string][]string{
+				"a": {"b"},
+				"b": {"c"},
+				"c": {},
+				"d": {"a"},
+			},
+			start: "a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractDownstreamSubgraph(tt.graph, tt.start)
+			result = extractUpstreamSubgraph(result, tt.start)
+			require.Len(t, result, 1)
 		})
 	}
 }

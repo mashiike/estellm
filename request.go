@@ -7,19 +7,22 @@ import (
 )
 
 type Request struct {
-	Name            string               `json:"name"`
-	Payload         any                  `json:"payload"`
-	Metadata        metadata.Metadata    `json:"metadata"`
-	PreviousResults map[string]*Response `json:"previous_results,omitempty"`
-	IncludeDeps     bool                 `json:"include_deps,omitempty"`
-	Tools           ToolSet              `json:"tools,omitempty"`
+	Name              string               `json:"name"`
+	Payload           any                  `json:"payload"`
+	Metadata          metadata.Metadata    `json:"metadata"`
+	PreviousResults   map[string]*Response `json:"previous_results,omitempty"`
+	IncludeUpstream   bool                 `json:"include_upstream,omitempty"`
+	IncludeDownstream bool                 `json:"include_downstream,omitempty"`
+	Tools             ToolSet              `json:"tools,omitempty"`
 }
 
 func NewRequest(name string, payload any) (*Request, error) {
 	return &Request{
-		Name:     name,
-		Payload:  payload,
-		Metadata: make(metadata.Metadata),
+		Name:              name,
+		Payload:           payload,
+		Metadata:          make(metadata.Metadata),
+		IncludeUpstream:   false,
+		IncludeDownstream: true,
 	}, nil
 }
 
@@ -42,10 +45,11 @@ func (r *Request) TemplateData() map[string]any {
 		}
 	}
 	return map[string]any{
-		"name":             r.Name,
-		"payload":          payload,
-		"metadata":         r.Metadata,
-		"previous_results": r.PreviousResults,
-		"include_deps":     r.IncludeDeps,
+		"name":               r.Name,
+		"payload":            payload,
+		"metadata":           r.Metadata,
+		"previous_results":   r.PreviousResults,
+		"include_upstream":   r.IncludeUpstream,
+		"include_downstream": r.IncludeDownstream,
 	}
 }

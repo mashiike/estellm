@@ -166,6 +166,10 @@ func (w *TextStreamingResponseWriter) SkipReasoning() {
 	w.enc.SkipReasoning()
 }
 
+func (w *TextStreamingResponseWriter) SetBinaryOutputDir(dir string) {
+	w.enc.SetBinaryOutputDir(dir)
+}
+
 func (w *TextStreamingResponseWriter) Metadata() metadata.Metadata {
 	return w.metadata
 }

@@ -42,6 +42,6 @@ func TestRegistry(t *testing.T) {
 	p, err = l.Load(ctx, os.DirFS("testdata"), "not_exists.md")
 	require.NoError(t, err)
 	agent, err = registry.NewAgent(ctx, p)
-	require.ErrorIs(t, err, estellm.ErrAgentNotFound)
+	require.ErrorIs(t, err, estellm.ErrAgentTypeNotFound)
 	require.Nil(t, agent)
 }

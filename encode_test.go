@@ -2,6 +2,8 @@ package estellm_test
 
 import (
 	"bytes"
+	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/mashiike/estellm"
@@ -30,8 +32,7 @@ func TestMessageEncoder__Encode(t *testing.T) {
 	require.NoError(t, err)
 
 	expected := `<role:user/>This is user message.
-<role:assistant/>This is assistant message.
-`
+<role:assistant/>This is assistant message.`
 	require.Equal(t, expected, buf.String())
 }
 
@@ -58,8 +59,7 @@ func TestMessageEncoder__EncodeWithSystem(t *testing.T) {
 
 	expected := `system message
 <role:user/>This is user message.
-<role:assistant/>This is assistant message.
-`
+<role:assistant/>This is assistant message.`
 	require.Equal(t, expected, buf.String())
 }
 
@@ -82,8 +82,7 @@ func TestMessageEncoder__EncodeBinary(t *testing.T) {
 
 	expected := `<role:user/>explain this binary data.
 <binary src="data:text/plain;base64,SGVsbG8sIFdvcmxkIQ=="/>
-what is this?
-`
+what is this?`
 	require.Equal(t, expected, buf.String())
 }
 
@@ -148,7 +147,7 @@ func TestMessageEncoder_NoRole(t *testing.T) {
 	err := encoder.Encode("", messages)
 	require.NoError(t, err)
 
-	expected := "Hello\n"
+	expected := "Hello"
 	require.Equal(t, expected, buf.String())
 }
 
@@ -173,4 +172,32 @@ func TestMessageEncoder__EncodeReasoning(t *testing.T) {
 	expected := `<role:user/>What do you think?
 <think>I think this is a good idea. yes, I think so.</think>`
 	require.Equal(t, expected, buf.String())
+}
+
+func TestMessageEncoder__EncodeBinaryToFile(t *testing.T) {
+	messages := []estellm.Message{
+		{
+			Role: estellm.RoleUser,
+			Parts: []estellm.ContentPart{
+				estellm.TextPart("explain this binary data."),
+				estellm.BinaryPart("image/png", []byte{0x89, 0x50, 0x4E, 0x47}),
+				estellm.TextPart("what is this?"),
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	enc := estellm.NewMessageEncoder(&buf)
+	enc.SetBinaryOutputDir("/tmp")
+	err := enc.Encode("", messages)
+	require.NoError(t, err)
+
+	re := regexp.MustCompile(`!\[binary\]\(/tmp/([a-zA-Z0-9]+\.png)\)`)
+	matches := re.FindStringSubmatch(buf.String())
+	require.Len(t, matches, 2, "expected to find one match for the binary file path")
+
+	expected := `<role:user/>explain this binary data.
+![binary](/tmp/%s)
+what is this?`
+	require.Equal(t, fmt.Sprintf(expected, matches[1]), buf.String())
 }

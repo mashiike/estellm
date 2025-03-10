@@ -231,8 +231,11 @@ func (mux *AgentMux) Execute(ctx context.Context, req *Request, w ResponseWriter
 	if !ok {
 		return fmt.Errorf("agent `%s` not found", req.Name)
 	}
-	if !req.IncludeDeps {
-		graph = extractSubgraph(graph, req.Name)
+	if !req.IncludeUpstream {
+		graph = extractDownstreamSubgraph(graph, req.Name)
+	}
+	if !req.IncludeDownstream {
+		graph = extractUpstreamSubgraph(graph, req.Name)
 	}
 	return mux.executeGraph(ctx, graph, req, w)
 }
@@ -273,7 +276,8 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 					continue
 				}
 			}
-			nextAgents, err := mux.executeOne(ctx, cfg, node, req, w, previousResults, sinkNodes)
+			var nextAgents []string
+			previousResults, nextAgents, err = mux.executeOne(ctx, cfg, node, req, w, previousResults, sinkNodes)
 			if err != nil {
 				return err
 			}
@@ -305,26 +309,17 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 	return nil
 }
 
-func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, node string, req *Request, w ResponseWriter, previousResults map[string]*Response, sinkNodes []string) ([]string, error) {
+func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, node string, req *Request, w ResponseWriter, previousResults map[string]*Response, sinkNodes []string) (map[string]*Response, []string, error) {
 	agent, ok := mux.agents[node]
 	if !ok {
-		return nil, fmt.Errorf("agent `%s` not found", node)
+		return previousResults, nil, fmt.Errorf("agent `%s` not found", node)
 	}
 	if !*cfg.Enabled {
-		return nil, fmt.Errorf("prompt `%s` is disabled", node)
+		return previousResults, nil, fmt.Errorf("prompt `%s` is disabled", node)
 	}
 	cloned := req.Clone()
 	cloned = mux.refineRequest(cfg, cloned)
-	cloned.PreviousResults = make(map[string]*Response, len(previousResults))
-	dependsOn, ok := mux.dependents[node]
-	if !ok {
-		dependsOn = []string{}
-	}
-	for _, dep := range dependsOn {
-		if resp, ok := previousResults[dep]; ok {
-			cloned.PreviousResults[dep] = resp
-		}
-	}
+	cloned.PreviousResults = previousResults
 	tools := make(ToolSet, 0, len(cfg.Tools))
 	for _, tool := range cfg.Tools {
 		toolPrompt, ok := mux.prompts[tool]
@@ -346,18 +341,18 @@ func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, node string, r
 	w.Metadata().MergeInPlace(cfg.ResponseMetadata)
 	if slices.Contains(sinkNodes, node) {
 		if err := agent.Execute(ctx, cloned, w); err != nil {
-			return nil, fmt.Errorf("execute `%s`: %w", node, err)
+			return nil, nil, fmt.Errorf("execute `%s`: %w", node, err)
 		}
-		return nil, nil
+		return previousResults, nil, nil
 	}
 	batchWriter := NewBatchResponseWriter()
 	mw := NewReasoningMirrorResponseWriter(batchWriter, w)
 	if err := agent.Execute(ctx, cloned, mw); err != nil {
-		return nil, fmt.Errorf("execute `%s`: %w", node, err)
+		return previousResults, nil, fmt.Errorf("execute `%s`: %w", node, err)
 	}
 	resp := batchWriter.Response()
 	previousResults[node] = resp
-	return resp.Metadata.GetStrings(metadataKeyNextAgents), nil
+	return previousResults, resp.Metadata.GetStrings(metadataKeyNextAgents), nil
 }
 
 func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {

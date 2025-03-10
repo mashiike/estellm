@@ -118,13 +118,13 @@ func TestNewAgentMux__Execute(t *testing.T) {
 		goldie.WithNameSuffix(".golden.json"),
 	)
 	cases := []struct {
-		name          string
-		includes      string
-		prompts       string
-		start         string
-		payload       any
-		includeDeps   bool
-		skipStructure bool
+		name            string
+		includes        string
+		prompts         string
+		start           string
+		payload         any
+		includeUpstream bool
+		skipStructure   bool
 	}{
 		{
 			name:     "simple",
@@ -140,12 +140,12 @@ func TestNewAgentMux__Execute(t *testing.T) {
 			skipStructure: true,
 		},
 		{
-			name:          "simple_include_deps",
-			includes:      "testdata/simple/includes",
-			prompts:       "testdata/simple/prompts",
-			start:         "task_b",
-			includeDeps:   true,
-			skipStructure: true,
+			name:            "simple_include_upstream",
+			includes:        "testdata/simple/includes",
+			prompts:         "testdata/simple/prompts",
+			start:           "task_b",
+			includeUpstream: true,
+			skipStructure:   true,
 		},
 		{
 			name:     "tools",
@@ -177,7 +177,7 @@ func TestNewAgentMux__Execute(t *testing.T) {
 			executionHistory.Reset()
 			req, err := estellm.NewRequest(c.start, c.payload)
 			require.NoError(t, err)
-			req.IncludeDeps = c.includeDeps
+			req.IncludeUpstream = c.includeUpstream
 			w := estellm.NewBatchResponseWriter()
 			err = mux.Execute(context.Background(), req, w)
 			require.NoError(t, err)

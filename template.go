@@ -44,6 +44,9 @@ func newReference(cfg *Config, resp *Response) map[string]any {
 var builtinTemplateFuncs = template.FuncMap{
 	"toXml":           toXml,
 	"toXmlWithPrefix": toXmlWithPrefix,
+	"resolve": func(name string) (map[string]any, error) {
+		return newReference(nil, nil), nil
+	},
 	"ref": func(name string) (map[string]any, error) {
 		return newReference(nil, nil), nil
 	},
@@ -86,6 +89,20 @@ func PromptExecutionPhaseTemplateFuncs(p *Prompt, req *Request) template.FuncMap
 		if req == nil {
 			return nil, fmt.Errorf("request is nil")
 		}
+		var resp *Response
+		if r, ok := req.PreviousResults[name]; ok {
+			resp = r
+		}
+		if p.relatedPrompts == nil {
+			return newReference(nil, resp), nil
+		}
+		var relatedCfg *Config
+		if relatedPrompt, ok := p.relatedPrompts[name]; ok {
+			relatedCfg = relatedPrompt.Config()
+		}
+		return newReference(relatedCfg, resp), nil
+	}
+	ret["resolve"] = func(name string) (map[string]any, error) {
 		var resp *Response
 		if r, ok := req.PreviousResults[name]; ok {
 			resp = r

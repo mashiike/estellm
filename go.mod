@@ -14,6 +14,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/mashiike/go-jsonnet-alias-importer v0.1.0
 	github.com/mashiike/slogutils v0.4.0
+	github.com/sashabaranov/go-openai v1.38.0
 	github.com/sebdah/goldie/v2 v2.5.5
 	github.com/stretchr/testify v1.10.0
 	github.com/xeipuuv/gojsonschema v1.2.0

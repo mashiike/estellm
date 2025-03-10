@@ -48,7 +48,7 @@ func pickupDAG(targetNode string, dependents map[string][]string) (map[string][]
 }
 
 func exploreDAG(target string, dependents map[string][]string) map[string][]string {
-	subGraph := extractSubgraph(reverseDependency(dependents), target)
+	subGraph := extractDownstreamSubgraph(reverseDependency(dependents), target)
 	sources := []string{}
 	for node, neighbors := range subGraph {
 		if len(neighbors) == 0 {
@@ -61,7 +61,7 @@ func exploreDAG(target string, dependents map[string][]string) map[string][]stri
 	}
 	graph := make(map[string][]string)
 	for _, source := range sources {
-		subGraph := extractSubgraph(dependents, source)
+		subGraph := extractDownstreamSubgraph(dependents, source)
 		for node, neighbors := range subGraph {
 			graph[node] = neighbors
 		}
@@ -70,7 +70,7 @@ func exploreDAG(target string, dependents map[string][]string) map[string][]stri
 }
 
 // extruct subgraph from start node to all reachable nodes
-func extractSubgraph(graph map[string][]string, start string) map[string][]string {
+func extractDownstreamSubgraph(graph map[string][]string, start string) map[string][]string {
 	if start == "" {
 		return graph
 	}
@@ -91,6 +91,11 @@ func extractSubgraph(graph map[string][]string, start string) map[string][]strin
 	}
 	dfs(start)
 	return subGraph
+}
+
+func extractUpstreamSubgraph(graph map[string][]string, start string) map[string][]string {
+	subGraph := extractDownstreamSubgraph(reverseDependency(graph), start)
+	return reverseDependency(subGraph)
 }
 
 func topologicalSort(graph map[string][]string) ([][]string, error) {
@@ -160,6 +165,9 @@ func findSinkNodes(graph map[string][]string) []string {
 func reverseDependency(dependents map[string][]string) map[string][]string {
 	dependsOn := make(map[string][]string)
 	for name, deps := range dependents {
+		if _, exists := dependsOn[name]; !exists {
+			dependsOn[name] = []string{}
+		}
 		for _, dep := range deps {
 			dependsOn[dep] = append(dependsOn[dep], name)
 		}
@@ -168,7 +176,13 @@ func reverseDependency(dependents map[string][]string) map[string][]string {
 }
 
 func findSourceNodes(graph map[string][]string) []string {
-	return findSinkNodes(reverseDependency(graph))
+	reversed := reverseDependency(graph)
+	for node, deps := range graph {
+		if len(deps) == 0 {
+			delete(reversed, node)
+		}
+	}
+	return findSinkNodes(reversed)
 }
 
 func mergeFuncMaps(funcMaps map[string]template.FuncMap) (template.FuncMap, error) {

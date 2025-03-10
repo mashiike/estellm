@@ -119,7 +119,8 @@ func (c *CLI) runExec(ctx context.Context, mux *estellm.AgentMux) error {
 	if err != nil {
 		return fmt.Errorf("new request: %w", err)
 	}
-	req.IncludeDeps = c.Exec.IncludeDeps
+	req.IncludeUpstream = c.Exec.IncludeUpstream
+	req.IncludeDownstream = c.Exec.IncludeDownstream
 	switch c.Exec.OutputFormat {
 	case "json":
 		w := estellm.NewBatchResponseWriter()
@@ -134,6 +135,9 @@ func (c *CLI) runExec(ctx context.Context, mux *estellm.AgentMux) error {
 		}
 	case "text":
 		w := estellm.NewTextStreamingResponseWriter(os.Stdout)
+		if c.Exec.FileOutput != "" {
+			w.SetBinaryOutputDir(c.Exec.FileOutput)
+		}
 		if err := mux.Execute(ctx, req, w); err != nil {
 			return fmt.Errorf("execute prompt: %w", err)
 		}
@@ -241,9 +245,11 @@ type PromptOption struct {
 
 type ExecOption struct {
 	PromptOption
-	OutputFormat string `help:"Output format" enum:"json,text" default:"text"`
-	IncludeDeps  bool   `help:"Include upstream dependencies"`
-	DumpMetadata bool   `help:"Dump metadata if output format is text"`
+	OutputFormat      string `help:"Output format" enum:"json,text" default:"text"`
+	IncludeUpstream   bool   `help:"Include upstream dependencies" negatable:""`
+	IncludeDownstream bool   `help:"Include downstream dependencies" default:"true" negatable:""`
+	DumpMetadata      bool   `help:"Dump metadata if output format is text"`
+	FileOutput        string `help:"Output file dir" default:""`
 }
 
 type RenderOption struct {

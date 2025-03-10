@@ -3,6 +3,7 @@ package estellm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"text/template"
 )
@@ -31,7 +32,7 @@ var (
 	ErrInvalidConfig          = errors.New("invalid config")
 	ErrAgentTypeEmpty         = errors.New("agent type is empty")
 	ErrAgentAlreadyRegistered = errors.New("agent already registered")
-	ErrAgentNotFound          = errors.New("agent not found")
+	ErrAgentTypeNotFound      = errors.New("agent type not found")
 )
 
 // Register registers a new agent.
@@ -55,7 +56,7 @@ func (r *Registry) SetTemplateFuncs(name string, funcs template.FuncMap) error {
 		return ErrAgentTypeEmpty
 	}
 	if _, ok := r.newFuncs[name]; !ok {
-		return ErrAgentNotFound
+		return fmt.Errorf("type `%s`: %w", name, ErrAgentTypeNotFound)
 	}
 	if r.templateFuncs == nil {
 		r.templateFuncs = make(map[string]template.FuncMap)
@@ -74,7 +75,7 @@ func (r *Registry) SetMarmaidNodeWrapper(name string, f func(string) string) err
 		return ErrAgentTypeEmpty
 	}
 	if _, ok := r.newFuncs[name]; !ok {
-		return ErrAgentNotFound
+		return fmt.Errorf("type `%s`: %w", name, ErrAgentTypeNotFound)
 	}
 	if r.marmaidNodeWrappers == nil {
 		r.marmaidNodeWrappers = make(map[string]func(string) string)
@@ -138,10 +139,10 @@ func (r *Registry) NewAgent(ctx context.Context, p *Prompt) (Agent, error) {
 	if cfg.Type == "" {
 		return nil, ErrAgentTypeEmpty
 	}
-	exectorType := cfg.Type
-	f, ok := r.newFuncs[exectorType]
+	agentType := cfg.Type
+	f, ok := r.newFuncs[agentType]
 	if !ok {
-		return nil, ErrAgentNotFound
+		return nil, fmt.Errorf("type `%s`: %w", agentType, ErrAgentTypeNotFound)
 	}
 	return f(ctx, p)
 }

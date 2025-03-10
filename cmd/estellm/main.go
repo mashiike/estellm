@@ -10,10 +10,12 @@ import (
 	//builtin agents import
 	_ "github.com/mashiike/estellm/agent/constant"
 	_ "github.com/mashiike/estellm/agent/decision"
+	_ "github.com/mashiike/estellm/agent/genimage"
 	_ "github.com/mashiike/estellm/agent/gentext"
 
 	//builtin providers import
 	_ "github.com/mashiike/estellm/provider/bedrock"
+	_ "github.com/mashiike/estellm/provider/openai"
 )
 
 func main() {
