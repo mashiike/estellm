@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.29.7
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.25.0
 	github.com/aws/smithy-go v1.22.3
-	github.com/fatih/color v1.15.0
+	github.com/fatih/color v1.18.0
 	github.com/google/go-jsonnet v0.20.0
 	github.com/mashiike/go-jsonnet-alias-importer v0.1.0
 	github.com/mashiike/slogutils v0.4.0
@@ -39,7 +39,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/pascaldekloe/name v1.0.0 // indirect
