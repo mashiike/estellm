@@ -79,8 +79,6 @@ github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
 github.com/mailru/easyjson v0.9.0 h1:PrnmzHw7262yW8sTBwxi1PdJA3Iw/EKBa8psRf7d9a4=
 github.com/mailru/easyjson v0.9.0/go.mod h1:1+xMtQp2MRNVL/V1bOzuP3aP8VNwRW55fQUto+XFtTU=
-github.com/mashiike/bedrocktool v0.7.1 h1:xEMPs9QLWmSy4QWJhW9l+MGYow/WKanddOOfjJLt75Y=
-github.com/mashiike/bedrocktool v0.7.1/go.mod h1:1m3MkG/14XqqzCUdiGgfJsWVGvIB9uZNeFJdQcXI4+g=
 github.com/mashiike/go-jsonnet-alias-importer v0.1.0 h1:PCli2EQv4ymI3lL+QRnnjKDUG128vGeLoVHxSITtQ7I=
 github.com/mashiike/go-jsonnet-alias-importer v0.1.0/go.mod h1:Ch9Hiq69iCTd3XmdtUm4bdSxxSN1KrJt2IEBgyYXfVU=
 github.com/mashiike/slogutils v0.4.0 h1:VQIkeEZ/dMhYnwwXPI5Ve19ZuD2fJTwLQ7ZoSkt+zfE=
@@ -113,8 +111,6 @@ github.com/shopspring/decimal v1.4.0/go.mod h1:gawqmDU56v4yIKSwfBSFip1HdCCXN8/+D
 github.com/spf13/cast v1.7.1 h1:cuNEagBQEHWN1FnbGEjCXL2szYEXqfJPbP2HNUaca9Y=
 github.com/spf13/cast v1.7.1/go.mod h1:ancEpBxwJDODSW/UG4rDrAqiKolqNNh2DX3mk86cAdo=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
-github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
-github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
