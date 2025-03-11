@@ -185,10 +185,6 @@ type RemoteToolConfig struct {
 	ResponseValidator  func(resp *http.Response, req *http.Request) error
 }
 
-type remoteWorker struct {
-	tool *Tool
-}
-
 func NewRemoteTool(ctx context.Context, cfg RemoteToolConfig) (*RemoteTool, error) {
 	if cfg.Endpoint == "" {
 		return nil, errors.New("endpoint is required")

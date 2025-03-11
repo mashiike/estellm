@@ -19,12 +19,6 @@ type Prompt struct {
 	reg            *Registry
 }
 
-func newEmptyPrompt(cfg *Config) *Prompt {
-	return &Prompt{
-		cfg: cfg,
-	}
-}
-
 func (p *Prompt) Name() string {
 	return p.cfg.Name
 }
