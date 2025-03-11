@@ -42,8 +42,8 @@ func newReference(cfg *Config, resp *Response) map[string]any {
 }
 
 var builtinTemplateFuncs = template.FuncMap{
-	"toXml":           toXml,
-	"toXmlWithPrefix": toXmlWithPrefix,
+	"toXml":           toXML,
+	"toXmlWithPrefix": toXMLWithPrefix,
 	"resolve": func(_ string) (map[string]any, error) {
 		return newReference(nil, nil), nil
 	},
@@ -145,7 +145,7 @@ func PromptExecutionPhaseTemplateFuncs(p *Prompt, req *Request) template.FuncMap
 	return ret
 }
 
-func toXml(tag string, v any) (string, error) {
+func toXML(tag string, v any) (string, error) {
 	buf := new(bytes.Buffer)
 	enc := xml.NewEncoder(buf)
 	enc.Indent("", "  ")
@@ -155,7 +155,7 @@ func toXml(tag string, v any) (string, error) {
 	return buf.String(), nil
 }
 
-func toXmlWithPrefix(tag string, prefix string, v any) (string, error) {
+func toXMLWithPrefix(tag string, prefix string, v any) (string, error) {
 	buf := new(bytes.Buffer)
 	enc := xml.NewEncoder(buf)
 	enc.Indent(prefix, "  ")

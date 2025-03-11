@@ -46,7 +46,7 @@ func (w *responseWriterToWriter) WriteString(s string) (n int, err error) {
 	return len(s), nil
 }
 
-func ResponseWriterToWriter(w ResponseWriter) *responseWriterToWriter {
+func ResponseWriterToWriter(w ResponseWriter) io.Writer {
 	return &responseWriterToWriter{w: w}
 }
 

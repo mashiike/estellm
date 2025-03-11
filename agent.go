@@ -422,7 +422,7 @@ func (mux *AgentMux) RenderBlock(ctx context.Context, blockName string, req *Req
 	return p.RenderBlock(ctx, blockName, mux.refineRequest(p.Config(), req))
 }
 
-func (mux *AgentMux) RenderConfig(ctx context.Context, name string, isJsonnet bool) (string, error) {
+func (mux *AgentMux) RenderConfig(_ context.Context, name string, isJsonnet bool) (string, error) {
 	if name == "" {
 		name = mux.defaultAgent
 	}

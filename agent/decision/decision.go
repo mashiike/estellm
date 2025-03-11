@@ -43,7 +43,7 @@ type Agent struct {
 	modelProvider estellm.ModelProvider
 }
 
-type DecisionOutput struct {
+type Output struct {
 	NextAgent  string  `json:"next_agent"`
 	Reasoning  string  `json:"reasoning"`
 	Confidence float64 `json:"confidence"`
@@ -89,7 +89,7 @@ func (a *Agent) Execute(ctx context.Context, req *estellm.Request, w estellm.Res
 		return fmt.Errorf("generate text: %w", err)
 	}
 	resp := batch.Response()
-	var output DecisionOutput
+	var output Output
 	if err := jsonutil.UnmarshalFirstJSON([]byte(resp.String()), &output); err != nil {
 		return fmt.Errorf("extruct output: %w", err)
 	}

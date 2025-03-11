@@ -32,7 +32,7 @@ func init() {
 	estellm.RegisterModelProvider("bedrock", &ModelProvider{})
 }
 
-type BedrockAPIClient interface {
+type Client interface {
 	InvokeModel(ctx context.Context, input *bedrockruntime.InvokeModelInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.InvokeModelOutput, error)
 	ConverseStream(ctx context.Context, params *bedrockruntime.ConverseStreamInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseStreamOutput, error)
 }
@@ -40,15 +40,15 @@ type BedrockAPIClient interface {
 type ModelProvider struct {
 	init    sync.Once
 	awsCfg  *aws.Config
-	client  BedrockAPIClient
+	client  Client
 	initErr error
 }
 
-func NewWithClient(client BedrockAPIClient) *ModelProvider {
+func NewWithClient(client Client) *ModelProvider {
 	return &ModelProvider{client: client}
 }
 
-func (p *ModelProvider) SetClilent(client BedrockAPIClient) {
+func (p *ModelProvider) SetClilent(client Client) {
 	p.client = client
 }
 
@@ -572,7 +572,7 @@ func processMessageStop(_ context.Context, v *types.ConverseStreamOutputMemberMe
 	return false, nil
 }
 
-func processContentBlockStart(ctx context.Context, v *types.ConverseStreamOutputMemberContentBlockStart, w estellm.ResponseWriter, toolInputBuilder *bytes.Buffer) (types.ContentBlock, error) {
+func processContentBlockStart(ctx context.Context, v *types.ConverseStreamOutputMemberContentBlockStart, _ estellm.ResponseWriter, toolInputBuilder *bytes.Buffer) (types.ContentBlock, error) {
 	switch v := v.Value.Start.(type) {
 	case *types.ContentBlockStartMemberToolUse:
 		toolInputBuilder.Reset()
