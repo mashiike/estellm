@@ -62,7 +62,7 @@ func (p *Prompt) Blocks() []string {
 	return blocks
 }
 
-func (p *Prompt) RenderBlock(ctx context.Context, blockName string, req *Request) (string, error) {
+func (p *Prompt) RenderBlock(_ context.Context, blockName string, req *Request) (string, error) {
 	sl := gojsonschema.NewGoLoader(p.cfg.PayloadSchema)
 	dl := gojsonschema.NewGoLoader(req.Payload)
 	result, err := gojsonschema.Validate(sl, dl)

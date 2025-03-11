@@ -29,7 +29,6 @@ func (f AgentFunc) Execute(ctx context.Context, req *Request, w ResponseWriter) 
 
 type AgentMux struct {
 	defaultAgent     string
-	mu               sync.RWMutex
 	prompts          map[string]*Prompt
 	agents           map[string]Agent
 	dependents       map[string][]string

@@ -22,7 +22,7 @@ type Agent struct {
 	p *estellm.Prompt
 }
 
-func NewAgent(ctx context.Context, p *estellm.Prompt) (estellm.Agent, error) {
+func NewAgent(_ context.Context, p *estellm.Prompt) (estellm.Agent, error) {
 	return &Agent{p: p}, nil
 }
 

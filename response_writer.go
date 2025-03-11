@@ -145,7 +145,7 @@ func (w *TextStreamingResponseWriter) Metadata() metadata.Metadata {
 	return w.metadata
 }
 
-func (w *TextStreamingResponseWriter) WriteRole(role string) error {
+func (w *TextStreamingResponseWriter) WriteRole(_ string) error {
 	// nothing to do
 	return nil
 }

@@ -44,10 +44,10 @@ func newReference(cfg *Config, resp *Response) map[string]any {
 var builtinTemplateFuncs = template.FuncMap{
 	"toXml":           toXml,
 	"toXmlWithPrefix": toXmlWithPrefix,
-	"resolve": func(name string) (map[string]any, error) {
+	"resolve": func(_ string) (map[string]any, error) {
 		return newReference(nil, nil), nil
 	},
-	"ref": func(name string) (map[string]any, error) {
+	"ref": func(_ string) (map[string]any, error) {
 		return newReference(nil, nil), nil
 	},
 	"self": func() (map[string]any, error) {
