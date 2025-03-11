@@ -29,30 +29,32 @@ func (f AgentFunc) Execute(ctx context.Context, req *Request, w ResponseWriter) 
 }
 
 type AgentMux struct {
-	defaultAgent      string
-	prompts           map[string]*Prompt
-	agents            map[string]Agent
-	dependents        map[string][]string
-	toolsDepenedents  map[string][]string
-	remoteTools       map[string]*RemoteTool
-	remoteToolConfigs map[string]RemoteToolConfig
-	remoteToolMu      sync.Mutex
-	isCycle           bool
-	validate          func() error
-	logger            *slog.Logger
-	reg               *Registry
-	middleware        []func(next Agent) Agent
+	defaultAgent        string
+	prompts             map[string]*Prompt
+	agents              map[string]Agent
+	dependents          map[string][]string
+	toolsDepenedents    map[string][]string
+	baseRmoteToolConfig RemoteToolConfig
+	remoteTools         map[string]*RemoteTool
+	remoteToolConfigs   map[string]RemoteToolConfig
+	remoteToolMu        sync.Mutex
+	isCycle             bool
+	validate            func() error
+	logger              *slog.Logger
+	reg                 *Registry
+	middleware          []func(next Agent) Agent
 }
 
 type newAgentMuxOptions struct {
-	registry        *Registry
-	includesFs      fs.FS
-	promptsFs       fs.FS
-	extCodes        map[string]string
-	extVars         map[string]string
-	nativeFunctions []*jsonnet.NativeFunction
-	templateFuncs   template.FuncMap
-	logger          *slog.Logger
+	registry            *Registry
+	includesFs          fs.FS
+	promptsFs           fs.FS
+	extCodes            map[string]string
+	extVars             map[string]string
+	nativeFunctions     []*jsonnet.NativeFunction
+	templateFuncs       template.FuncMap
+	logger              *slog.Logger
+	baseRmoteToolConfig RemoteToolConfig
 }
 
 type NewAgentMuxOption func(*newAgentMuxOptions)
@@ -111,16 +113,23 @@ func WithNativeFunctions(functions ...*jsonnet.NativeFunction) NewAgentMuxOption
 	}
 }
 
+func WithRemoteToolConfig(cfg RemoteToolConfig) NewAgentMuxOption {
+	return func(o *newAgentMuxOptions) {
+		o.baseRmoteToolConfig = cfg
+	}
+}
+
 func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, error) {
 	o := newAgentMuxOptions{
-		registry:        defaultRegistory,
-		promptsFs:       os.DirFS("prompts"),
-		includesFs:      os.DirFS("includes"),
-		extCodes:        map[string]string{},
-		extVars:         map[string]string{},
-		nativeFunctions: []*jsonnet.NativeFunction{},
-		templateFuncs:   template.FuncMap{},
-		logger:          slog.Default(),
+		registry:            defaultRegistory,
+		promptsFs:           os.DirFS("prompts"),
+		includesFs:          os.DirFS("includes"),
+		extCodes:            map[string]string{},
+		extVars:             map[string]string{},
+		nativeFunctions:     []*jsonnet.NativeFunction{},
+		templateFuncs:       template.FuncMap{},
+		logger:              slog.Default(),
+		baseRmoteToolConfig: RemoteToolConfig{},
 	}
 	for _, fn := range optFns {
 		fn(&o)
@@ -154,9 +163,9 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		toolsDepenedents[name] = cfg.Tools
 		for _, tool := range toolsDepenedents[name] {
 			if u, err := url.Parse(tool); err == nil && slices.Contains([]string{"http", "https"}, u.Scheme) {
-				remoteToolConfigs[tool] = RemoteToolConfig{
-					Endpoint: tool,
-				}
+				remoteToolConfig := o.baseRmoteToolConfig
+				remoteToolConfig.Endpoint = tool
+				remoteToolConfigs[tool] = remoteToolConfig
 				continue
 			}
 			if _, ok := dependents[tool]; !ok {
