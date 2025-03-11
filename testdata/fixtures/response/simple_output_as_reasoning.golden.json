@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "Key1": [
+      "value1"
+    ],
+    "Key2": [
+      "value2"
+    ]
+  },
+  "message": {
+    "role": "assistant",
+    "parts": [
+      {
+        "type": "reasoning",
+        "text": "execute start \n"
+      },
+      {
+        "type": "text",
+        "text": "execute end \n"
+      }
+    ]
+  }
+}

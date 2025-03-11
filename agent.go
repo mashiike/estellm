@@ -350,8 +350,11 @@ func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, req *Request, 
 		return nil, nil
 	}
 	batchWriter := NewBatchResponseWriter()
-	mw := NewReasoningMirrorResponseWriter(batchWriter, w)
-	if err := agent.Execute(ctx, req, mw); err != nil {
+	w = NewReasoningMirrorResponseWriter(batchWriter, w)
+	if cfg.AsReasoning {
+		w = NewAsReasoningResponseWriter(w)
+	}
+	if err := agent.Execute(ctx, req, w); err != nil {
 		return nil, fmt.Errorf("execute `%s`: %w", node, err)
 	}
 	resp := batchWriter.Response()

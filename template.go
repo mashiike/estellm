@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"maps"
+	"os"
 	"strings"
 	"text/template"
 
@@ -42,6 +43,7 @@ func newReference(cfg *Config, resp *Response) map[string]any {
 }
 
 var builtinTemplateFuncs = template.FuncMap{
+	"mustEnv":         mustEnv,
 	"toXml":           toXML,
 	"toXmlWithPrefix": toXMLWithPrefix,
 	"resolve": func(_ string) (map[string]any, error) {
@@ -163,4 +165,12 @@ func toXMLWithPrefix(tag string, prefix string, v any) (string, error) {
 		return "", err
 	}
 	return strings.TrimPrefix(buf.String(), prefix), nil
+}
+
+func mustEnv(name string) (string, error) {
+	v, ok := os.LookupEnv(name)
+	if !ok {
+		return "", fmt.Errorf("msunv %s is not set", name)
+	}
+	return v, nil
 }

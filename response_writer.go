@@ -224,3 +224,25 @@ func (w *ReasoningMirrorResponseWriter) Finish(reason FinishReason, msg string) 
 	}
 	return nil
 }
+
+type AsReasoningResponseWriter struct {
+	ResponseWriter
+}
+
+func NewAsReasoningResponseWriter(w ResponseWriter) *AsReasoningResponseWriter {
+	return &AsReasoningResponseWriter{
+		ResponseWriter: w,
+	}
+}
+
+func (w *AsReasoningResponseWriter) WritePart(parts ...ContentPart) error {
+	rewrite := make([]ContentPart, 0, len(parts))
+	for _, part := range parts {
+		rewrite = append(rewrite, part)
+		if part.Type == PartTypeText {
+			part.Type = PartTypeReasoning
+			rewrite = append(rewrite, part)
+		}
+	}
+	return w.ResponseWriter.WritePart(rewrite...)
+}

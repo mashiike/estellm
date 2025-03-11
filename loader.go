@@ -47,7 +47,7 @@ func NewLoader() *Loader {
 }
 
 func (l *Loader) makeVM() *jsonnet.VM {
-	vm := jsonnet.MakeVM()
+	vm := makeVM()
 	for k, v := range l.extVars {
 		vm.ExtVar(k, v)
 	}

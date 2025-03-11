@@ -1,6 +1,9 @@
 {{ define "config" }}
+local mustEnv = std.native("mustEnv");
 {
-    type: "test_agent", 
+
+    type: "test_agent",
+    as_reasoning: (mustEnv("AS_REASONING") == "true"),
 }
 {{ end }}
 
