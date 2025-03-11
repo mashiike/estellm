@@ -29,20 +29,19 @@ func (f AgentFunc) Execute(ctx context.Context, req *Request, w ResponseWriter) 
 }
 
 type AgentMux struct {
-	defaultAgent        string
-	prompts             map[string]*Prompt
-	agents              map[string]Agent
-	dependents          map[string][]string
-	toolsDepenedents    map[string][]string
-	baseRmoteToolConfig RemoteToolConfig
-	remoteTools         map[string]*RemoteTool
-	remoteToolConfigs   map[string]RemoteToolConfig
-	remoteToolMu        sync.Mutex
-	isCycle             bool
-	validate            func() error
-	logger              *slog.Logger
-	reg                 *Registry
-	middleware          []func(next Agent) Agent
+	defaultAgent      string
+	prompts           map[string]*Prompt
+	agents            map[string]Agent
+	dependents        map[string][]string
+	toolsDepenedents  map[string][]string
+	remoteTools       map[string]*RemoteTool
+	remoteToolConfigs map[string]RemoteToolConfig
+	remoteToolMu      sync.Mutex
+	isCycle           bool
+	validate          func() error
+	logger            *slog.Logger
+	reg               *Registry
+	middleware        []func(next Agent) Agent
 }
 
 type newAgentMuxOptions struct {
