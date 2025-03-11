@@ -1,6 +1,10 @@
 {{ define "config" }}
+local mustEnv = std.native("mustEnv");
 {
     type: "test_agent", 
+    tools: [
+        mustEnv("REMOTE_TOOL_ENDPOINT"),
+    ],
 }
 {{ end }}
 

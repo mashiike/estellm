@@ -90,27 +90,16 @@ func TestHandler__NotFound(t *testing.T) {
 	require.JSONEq(t, `{"error":"Not Found", "message":"the requested resource \"/notfound\" was not found", "status":404}`, resp.Body.String())
 }
 
-func TestRemoteTool(t *testing.T) {
+func startRemoteToolServer[T any](t *testing.T, name string, desc string, f func(context.Context, T, estellm.ResponseWriter) error) *httptest.Server {
+	t.Helper()
 	var h http.Handler
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Logf("request: %s %s", r.Method, r.URL)
 		h.ServeHTTP(w, r)
 	}))
-	defer server.Close()
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	internalTool, err := estellm.NewTool("weather", "return weather", func(ctx context.Context, input weatherInput, w estellm.ResponseWriter) error {
-		require.EqualValues(t, "東京", input.City)
-		require.EqualValues(t, "2022-01-01T00:00:00Z", input.When)
-		toolName, ok := estellm.ToolNameFromContext(ctx)
-		require.True(t, ok)
-		toolUseID, ok := estellm.ToolUseIDFromContext(ctx)
-		require.True(t, ok)
-		require.EqualValues(t, "weather", toolName)
-		require.NotEmpty(t, toolUseID)
-		w.WritePart(estellm.TextPart("sunny"))
-		return nil
-	})
+	internalTool, err := estellm.NewTool(name, desc, f)
 	require.NoError(t, err)
 	h, err = estellm.NewRemoteToolHandler(estellm.RemoteToolHandlerConfig{
 		Endpoint:   u,
@@ -118,7 +107,27 @@ func TestRemoteTool(t *testing.T) {
 		Tool:       internalTool,
 	})
 	require.NoError(t, err)
+	return server
+}
 
+func TestRemoteTool(t *testing.T) {
+	server := startRemoteToolServer(t,
+		"weather",
+		"return weather",
+		func(ctx context.Context, input weatherInput, w estellm.ResponseWriter) error {
+			require.EqualValues(t, "東京", input.City)
+			require.EqualValues(t, "2022-01-01T00:00:00Z", input.When)
+			toolName, ok := estellm.ToolNameFromContext(ctx)
+			require.True(t, ok)
+			toolUseID, ok := estellm.ToolUseIDFromContext(ctx)
+			require.True(t, ok)
+			require.EqualValues(t, "weather", toolName)
+			require.NotEmpty(t, toolUseID)
+			w.WritePart(estellm.TextPart("sunny"))
+			return nil
+		},
+	)
+	defer server.Close()
 	ctx := context.Background()
 	tool, err := estellm.NewRemoteTool(ctx, estellm.RemoteToolConfig{
 		Endpoint: server.URL,

@@ -81,6 +81,9 @@ func (p *Prompt) RenderBlock(_ context.Context, blockName string, req *Request) 
 	if !result.Valid() {
 		return "", &DataValidateError{Result: result}
 	}
+	if p.tmpl == nil {
+		return "", nil
+	}
 	tmpl := p.tmpl.Lookup(blockName)
 	if tmpl == nil {
 		return "", fmt.Errorf("block name `%s`: %w", blockName, ErrTemplateBlockNotFound)

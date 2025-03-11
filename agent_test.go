@@ -65,6 +65,10 @@ func TestNewAgentMux__Cycle(t *testing.T) {
 	}
 }
 
+type searchInput struct {
+	Query string `json:"query" jsonschema:"description=検索クエリ,required=true"`
+}
+
 func TestNewAgentMux__Execute(t *testing.T) {
 	seed := [32]byte{1}
 	randReader := rand.New(rand.NewChaCha8(seed))
@@ -117,6 +121,18 @@ func TestNewAgentMux__Execute(t *testing.T) {
 		goldie.WithFixtureDir("testdata/fixtures/response"),
 		goldie.WithNameSuffix(".golden.json"),
 	)
+	server := startRemoteToolServer(
+		t,
+		"weather",
+		"return weather",
+		func(ctx context.Context, input searchInput, w estellm.ResponseWriter) error {
+			w.WritePart(estellm.TextPart("sunny"))
+			w.Finish(estellm.FinishReasonEndTurn, "finish")
+			return nil
+		},
+	)
+	defer server.Close()
+	t.Setenv("REMOTE_TOOL_ENDPOINT", server.URL)
 	cases := []struct {
 		name            string
 		includes        string
@@ -199,7 +215,9 @@ func TestNewAgentMux__Execute(t *testing.T) {
 			require.NoError(t, err)
 			mux.Use(c.middleware...)
 			if !c.skipStructure {
-				g.Assert(t, c.name, []byte(mux.ToMarkdown()))
+				markdown := mux.ToMarkdown()
+				markdown = strings.ReplaceAll(markdown, server.URL, "http://localhost:8080")
+				g.Assert(t, c.name, []byte(markdown))
 			}
 			err = mux.Validate()
 			require.NoError(t, err)
