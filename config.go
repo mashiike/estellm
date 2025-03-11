@@ -25,6 +25,7 @@ type Config struct {
 	Tools            []string          `json:"tools,omitempty"`
 	RequestMetadata  metadata.Metadata `json:"request_metadata,omitempty"`
 	ResponseMetadata metadata.Metadata `json:"response_metadata,omitempty"`
+	AsReasoning      bool              `json:"as_reasoning,omitempty"`
 	vm               *jsonnet.VM       `json:"-"`
 	rawMap           map[string]any    `json:"-"`
 	dependents       []string          `json:"-"`
@@ -81,23 +82,15 @@ func (cfg *Config) Clone() *Config {
 	if cfg == nil {
 		return nil
 	}
-	return &Config{
-		Default:          cfg.Default,
-		Raw:              cfg.Raw,
-		PromptPath:       cfg.PromptPath,
-		Name:             cfg.Name,
-		Type:             cfg.Type,
-		DependsOn:        slices.Clone(cfg.DependsOn),
-		PayloadSchema:    maps.Clone(cfg.PayloadSchema),
-		rawMap:           maps.Clone(cfg.rawMap),
-		vm:               cfg.vm,
-		Enabled:          ptr(*cfg.Enabled),
-		dependents:       slices.Clone(cfg.dependents),
-		Tools:            slices.Clone(cfg.Tools),
-		RequestMetadata:  cfg.RequestMetadata.Clone(),
-		ResponseMetadata: cfg.ResponseMetadata.Clone(),
-		Description:      cfg.Description,
-	}
+	cloned := *cfg
+	cloned.rawMap = maps.Clone(cfg.rawMap)
+	cloned.vm = cfg.vm
+	cloned.Enabled = ptr(*cfg.Enabled)
+	cloned.dependents = slices.Clone(cfg.dependents)
+	cloned.Tools = slices.Clone(cfg.Tools)
+	cloned.RequestMetadata = cfg.RequestMetadata.Clone()
+	cloned.ResponseMetadata = cfg.ResponseMetadata.Clone()
+	return &cloned
 }
 
 func (cfg *Config) Dependents() []string {
