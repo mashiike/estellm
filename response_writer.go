@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"slices"
-	"strings"
 
 	"github.com/mashiike/estellm/metadata"
 )
@@ -50,35 +48,6 @@ func (w *responseWriterToWriter) WriteString(s string) (n int, err error) {
 
 func ResponseWriterToWriter(w ResponseWriter) *responseWriterToWriter {
 	return &responseWriterToWriter{w: w}
-}
-
-type Response struct {
-	Metadata      metadata.Metadata `json:"metadata,omitempty"`
-	Message       Message           `json:"message,omitempty"`
-	FinishReason  FinishReason      `json:"finish_reason,omitempty"`
-	FinishMessage string            `json:"finish_message,omitempty"`
-}
-
-func (r *Response) Clone() *Response {
-	clone := *r
-	clone.Metadata = r.Metadata.Clone()
-	clone.Message.Parts = slices.Clone(r.Message.Parts)
-	return &clone
-}
-
-func (r *Response) String() string {
-	if r == nil {
-		return "[no response]"
-	}
-	var sb strings.Builder
-	enc := NewMessageEncoder(&sb)
-	for _, part := range r.Message.Parts {
-		if err := enc.EncodeContentPart(part); err != nil {
-			return "[error encoding response]"
-		}
-	}
-	fmt.Fprintln(&sb)
-	return sb.String()
 }
 
 type BatchResponseWriter struct {

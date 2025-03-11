@@ -23,7 +23,7 @@ func newReference(cfg *Config, resp *Response) map[string]any {
 		}
 	}
 	if resp != nil {
-		reference["result"] = resp
+		reference["result"] = resp.TemplateData()
 	} else {
 		dummyResp := &Response{
 			Message: Message{
@@ -36,7 +36,7 @@ func newReference(cfg *Config, resp *Response) map[string]any {
 				},
 			},
 		}
-		reference["result"] = dummyResp
+		reference["result"] = dummyResp.TemplateData()
 	}
 	return reference
 }

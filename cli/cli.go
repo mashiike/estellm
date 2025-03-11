@@ -16,14 +16,14 @@ import (
 )
 
 type CLI struct {
-	LogFormat string            `help:"Log format" enum:"json,text" default:"json"`
+	LogFormat string            `help:"Log format" enum:"json,text" default:"json" env:"LOG_FORMAT"`
 	Color     bool              `help:"Enable color output" negatable:"" default:"true"`
 	Debug     bool              `help:"Enable debug mode" env:"DEBUG"`
 	ExtVar    map[string]string `help:"External variables external string values for Jsonnet" env:"EXT_VAR"`
 	ExtCode   map[string]string `help:"External code external string values for Jsonnet" env:"EXT_CODE"`
-	Project   string            `cmd:"" help:"Project directory" default:"./"`
-	Prompts   string            `cmd:"" help:"Prompts directory" default:"./prompts"`
-	Includes  string            `cmd:"" help:"Includes directory" default:"./includes"`
+	Project   string            `cmd:"" help:"Project directory" default:"./" env:"ESTELLM_PROJECT"`
+	Prompts   string            `cmd:"" help:"Prompts directory" default:"./prompts" env:"ESTELLM_PROMPTS"`
+	Includes  string            `cmd:"" help:"Includes directory" default:"./includes" env:"ESTELLM_INCLUDES"`
 	Exec      ExecOption        `cmd:"" help:"Execute the estellm"`
 	Render    RenderOption      `cmd:"" help:"Render prompt/config the estellm"`
 	Docs      DocsOptoin        `cmd:"" help:"Show agents documentation"`
@@ -96,9 +96,9 @@ func (c *CLI) run(ctx context.Context, k *kong.Context, logger *slog.Logger) err
 		return fmt.Errorf("initialize: %w", err)
 	}
 	switch cmd {
-	case "exec <prompt-name>":
+	case "exec <prompt-name>", "exec":
 		return c.runExec(ctx, mux)
-	case "render <prompt-name>":
+	case "render <prompt-name>", "render":
 		return c.runRender(ctx, mux)
 	case "docs":
 		return c.runDocs(ctx, mux)
@@ -236,7 +236,7 @@ func (e *PromptOption) ParsePayload() (map[string]any, error) {
 }
 
 type PromptOption struct {
-	PromptName string `arg:"" help:"Prompt name"`
+	PromptName string `arg:"" help:"Prompt name" default:""`
 	Payload    []byte `help:"Execution Payload"`
 }
 
@@ -246,7 +246,7 @@ type ExecOption struct {
 	IncludeUpstream   bool   `help:"Include upstream dependencies" negatable:""`
 	IncludeDownstream bool   `help:"Include downstream dependencies" default:"true" negatable:""`
 	DumpMetadata      bool   `help:"Dump metadata if output format is text"`
-	FileOutput        string `help:"Output file dir" default:""`
+	FileOutput        string `help:"Output file dir" default:"generated"`
 }
 
 type RenderOption struct {

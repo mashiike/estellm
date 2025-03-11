@@ -2,6 +2,7 @@ package estellm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -236,17 +237,21 @@ func (l *Loader) resetPrepare() {
 
 func (l *Loader) prepareTemplateImpl() (*template.Template, error) {
 	tmpl := l.tmpl.Funcs(ConfigLoadPhaseTemplateFuncs(l.reg))
-	if l.includesFS != nil {
-		paths, err := recursiveGlob(l.includesFS, l.patterns...)
+	if l.includesFS == nil {
+		return tmpl, nil
+	}
+	if _, err := fs.Stat(l.includesFS, "."); errors.Is(err, fs.ErrNotExist) {
+		return tmpl, nil
+	}
+	paths, err := recursiveGlob(l.includesFS, l.patterns...)
+	if err != nil {
+		return nil, fmt.Errorf("walk includes: %w", err)
+	}
+	if len(paths) > 0 {
+		var err error
+		tmpl, err = tmpl.ParseFS(l.includesFS, paths...)
 		if err != nil {
-			return nil, fmt.Errorf("walk includes: %w", err)
-		}
-		if len(paths) > 0 {
-			var err error
-			tmpl, err = tmpl.ParseFS(l.includesFS, paths...)
-			if err != nil {
-				return nil, fmt.Errorf("parse includes: %w", err)
-			}
+			return nil, fmt.Errorf("parse includes: %w", err)
 		}
 	}
 	return tmpl, nil

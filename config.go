@@ -16,6 +16,7 @@ type Config struct {
 	Raw              string            `json:"-"`
 	PromptPath       string            `json:"-"`
 	Enabled          *bool             `json:"enabled"`
+	Default          bool              `json:"default"`
 	Description      string            `json:"description"`
 	Name             string            `json:"name"`
 	Type             string            `json:"type"`
@@ -81,6 +82,7 @@ func (cfg *Config) Clone() *Config {
 		return nil
 	}
 	return &Config{
+		Default:          cfg.Default,
 		Raw:              cfg.Raw,
 		PromptPath:       cfg.PromptPath,
 		Name:             cfg.Name,

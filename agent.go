@@ -28,6 +28,7 @@ func (f AgentFunc) Execute(ctx context.Context, req *Request, w ResponseWriter) 
 }
 
 type AgentMux struct {
+	defaultAgent     string
 	mu               sync.RWMutex
 	prompts          map[string]*Prompt
 	agents           map[string]Agent
@@ -138,20 +139,29 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 	}
 	toolsDepenedents := make(map[string][]string, len(dependents))
 	agents := make(map[string]Agent, len(prompts))
+	var defaultAgent string
 	for name, p := range prompts {
 		agent, err := reg.NewAgent(ctx, p)
 		if err != nil {
 			return nil, fmt.Errorf("prompt `%s`: %w", name, err)
 		}
 		agents[name] = agent
-		toolsDepenedents[name] = p.Config().Tools
+		cfg := p.Config()
+		toolsDepenedents[name] = cfg.Tools
 		for _, tool := range toolsDepenedents[name] {
 			if _, ok := dependents[tool]; !ok {
 				return nil, fmt.Errorf("prompt `%s`: refarence `%s` as tool, but not found", name, tool)
 			}
 		}
+		if cfg.Default {
+			if defaultAgent != "" {
+				return nil, fmt.Errorf("multiple default agents: %s, %s", defaultAgent, name)
+			}
+			defaultAgent = name
+		}
 	}
 	mux := &AgentMux{
+		defaultAgent:     defaultAgent,
 		prompts:          prompts,
 		agents:           agents,
 		dependents:       dependents,
@@ -229,8 +239,8 @@ func (mux *AgentMux) Execute(ctx context.Context, req *Request, w ResponseWriter
 	if err := mux.Validate(); err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
-	if req == nil {
-		return fmt.Errorf("request is required")
+	if _, err := mux.validateRequest(req); err != nil {
+		return err
 	}
 	graph, ok := pickupDAG(req.Name, mux.dependents)
 	if !ok {
@@ -377,18 +387,35 @@ func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
 	return req
 }
 
-func (mux *AgentMux) Render(ctx context.Context, req *Request) (string, error) {
+func (mux *AgentMux) validateRequest(req *Request) (*Prompt, error) {
+	if req == nil {
+		return nil, fmt.Errorf("request is required")
+	}
+	if req.Name == "" {
+		req.Name = mux.defaultAgent
+	}
+	if req.Name == "" {
+		return nil, fmt.Errorf("agent name is required")
+	}
 	p, ok := mux.prompts[req.Name]
 	if !ok {
-		return "", fmt.Errorf("agent `%s` not found", req.Name)
+		return nil, fmt.Errorf("agent `%s` not found", req.Name)
+	}
+	return p, nil
+}
+
+func (mux *AgentMux) Render(ctx context.Context, req *Request) (string, error) {
+	p, err := mux.validateRequest(req)
+	if err != nil {
+		return "", err
 	}
 	return p.Render(ctx, mux.refineRequest(p.Config(), req))
 }
 
 func (mux *AgentMux) RenderBlock(ctx context.Context, blockName string, req *Request) (string, error) {
-	p, ok := mux.prompts[req.Name]
-	if !ok {
-		return "", fmt.Errorf("agent `%s` not found", req.Name)
+	p, err := mux.validateRequest(req)
+	if err != nil {
+		return "", err
 	}
 	if !slices.Contains(p.Blocks(), blockName) {
 		return "", fmt.Errorf("block `%s` not found in agent `%s`", blockName, req.Name)
@@ -397,6 +424,12 @@ func (mux *AgentMux) RenderBlock(ctx context.Context, blockName string, req *Req
 }
 
 func (mux *AgentMux) RenderConfig(ctx context.Context, name string, isJsonnet bool) (string, error) {
+	if name == "" {
+		name = mux.defaultAgent
+	}
+	if name == "" {
+		return "", fmt.Errorf("agent name is required")
+	}
 	p, ok := mux.prompts[name]
 	if !ok {
 		return "", fmt.Errorf("agent `%s` not found", name)
