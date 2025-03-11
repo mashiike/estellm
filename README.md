@@ -1,20 +1,20 @@
 # estellm
 
-`estellm` はAgentic Workflowを記述するためのツールです。
+`estellm` is a tool for describing Agentic Workflow.
 
 [![GoDoc](https://godoc.org/github.com/mashiike/estellm?status.svg)](https://godoc.org/github.com/mashiike/estellm)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mashiike/estellm)](https://goreportcard.com/report/github.com/mashiike/estellm)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-## インストール
+## Installation
 
 ```sh
 go get github.com/mashiike/estellm
 ```
 
-## 使い方 
+## Usage
 
-一番簡単なプロンプトの例は以下です。
+The simplest example of a prompt is as follows.
 ```md
 {{ define "config" }}
 {
@@ -53,14 +53,14 @@ You are an excellent calculation agent. Please check if the user's answer is cor
 <role:assistant/>Adding all the odd numbers
 ```
 
-以下のようなjsonを与えることで、このプロンプトを描画して実行することができます。
+You can render and execute this prompt by providing the following JSON.
 
 ```json
 {
   "numbers": [15,5,13,7,1]
 }
 
-このプロンプトを上記のペイロードで描画すると以下のようになります。
+Rendering this prompt with the above payload will look like this.
 
 ```sh
 $ cat _example/simple/payload.json| go run cmd/estellm/main.go --project _example/simple render
@@ -80,7 +80,7 @@ You are an excellent calculation agent. Please check if the user's answer is cor
 <role:assistant/>Adding all the odd numbers
 ```
 
-そして、以下のように実行することができます。
+And you can execute it as follows.
 
 ```sh
 $ cat _example/simple/payload.json| estellm --project _example/simple exec       
@@ -94,13 +94,13 @@ Calculating the sum:
 The sum is 41, which is odd. Therefore, the answer is False.
 ```
 
-コマンドは以下のHelpとしては以下のようになります。
+The command help is as follows.
 
 ```sh
 $ estellm --help
 Usage: estellm <command> [flags]
 
-Estellm is a tool for llm agetnts flow control.
+Estellm is a tool for llm agents flow control.
 
 Flags:
   -h, --help                      Show context-sensitive help.
@@ -130,8 +130,8 @@ Run "estellm <command> --help" for more information on a command.
 ```
 ## Advanced Usage
 
-詳しくは、 [Advanced Usage](./_example/advanced/) の中のプロンプトを参照してください。
-この例は以下のようなワークフローを表しています。
+For more details, refer to the prompts in [Advanced Usage](./_example/advanced/).
+This example represents the following workflow.
 
 ```mermaid
 flowchart TD
@@ -153,14 +153,14 @@ flowchart TD
     A6 -.->|tool_call| A7
 ```
 
-この図は以下で生成できます。
+You can generate this diagram with the following command.
 ```sh
 $estellm --project _example/advanced docs
 ```
 
-### `ref` テンプレート関数
-`estellm` の強力な機能の一つとして、プロンプト間での実行調整になります。
-以下の２つのプロンプトをプロンプトを例にします。
+### `ref` Template Function
+One of the powerful features of `estellm` is the ability to coordinate execution between prompts.
+Let's take the following two prompts as an example.
 
 _example/advanced/prompts/genimage_prompt.md
 ```
@@ -207,7 +207,7 @@ _example/advanced/prompts/genimage_prompt.md
 {{ (ref `genimage_prompt`).result }}
 ```
 
-`ref`というテンプレート関数を使うことで、`estellm` はこのプロンプトの依存関係を解釈して、適切な順序でプロンプトを実行します。
+By using the `ref` template function, `estellm` interprets the dependencies of these prompts and executes them in the correct order.
 
 ```sh
 $ cat _example/advanced/payload_generate_image.json| go run cmd/estellm/main.go --project _example/advanced exec genimage_prompt
@@ -216,9 +216,9 @@ $ cat _example/advanced/payload_generate_image.json| go run cmd/estellm/main.go 
 ![binary](generated/pReJ0mToYt.png)
 ```
 
-生成された画像は、通常では `generated` ディレクトリに保存されます。これは `--file-output` フラグを使って変更することができます。
+The generated image is usually saved in the `generated` directory. You can change this with the `--file-output` flag.
 
-`ref` テンプレート関数の中身は以下のようになっています。 
+The contents of the `ref` template function are as follows.
 ```jsonnet
 {
   "config": {
@@ -236,16 +236,15 @@ $ cat _example/advanced/payload_generate_image.json| go run cmd/estellm/main.go 
 }
 ```
 
-`.config`　には参照元のパース後のjsonデータが入っています。 `.result`には実行結果が入っています。
+`.config` contains the parsed JSON data of the referenced prompt. `.result` contains the execution result.
 
 ### agent types 
 
-`estellm` は複数の種類のエージェントをサポートしています。
+`estellm` supports multiple types of agents.
 
 #### `generate_text` 
 
-
-一番基本的なエージェントで、LLMを用いてテキストを生成します。
+The most basic agent that generates text using LLM.
 ```
 {{ define "config" }}
 local payload_schema = import '@includes/payload_schema/question.libsonnet';
@@ -265,13 +264,13 @@ You are an AI agent that answers user questions politely. Please answer the user
 <role:user/> {{ .payload.question }}
 ```
 
-`config` 部分では、`model_provider` と `model_id` で使用するモデルを指定します。`payload_schema` で入力データのスキーマを指定します。
-また、`tools` で他のプロンプトを指定すると `Function Calling` に対応している場合はToolとして使用します。
-`config` 部分は、jsonnetで記述できます。また、パスは `@includes` や `@prompts` というエイリアスを使って、それぞれ実行時のプロンプトなどのパスをimportできます。
+In the `config` section, specify the model to use with `model_provider` and `model_id`. Specify the input data schema with `payload_schema`.
+You can also specify other prompts as tools with `tools` if they support Function Calling.
+The `config` section can be written in jsonnet. Paths can be imported using aliases like `@includes` and `@prompts`.
 
 #### `generate_image` 
 
-画像生成エージェントでSDXLやDALL-Eなどの生成モデルを用いて画像を生成します。
+An image generation agent that generates images using models like SDXL or DALL-E.
 
 ```
 {{ define "config" }}
@@ -288,11 +287,11 @@ You are an AI agent that answers user questions politely. Please answer the user
 }
 ```
 
-* 画像生成AIがどのようなプロンプトを必要としているかは、対象によって変わります。
+* The type of prompt required by the image generation AI depends on the target.
 
 #### `decision` 
 
-意思決定エージェント。指定されたプロンプトに従い、JSONをLLMに生成させます。その後JSONを解釈して次に実行するべきエージェントを決定します。
+A decision-making agent. It generates JSON using LLM according to the specified prompt and then interprets the JSON to decide which agent to execute next.
 ```
 {{ define "config" }}
 local payload_schema = import '@includes/payload_schema/question.libsonnet';
@@ -328,16 +327,16 @@ Start the answer immediately without any preamble and output only the correct JS
 <role:user/> {{ .payload | toJson }}
 ```
 
-このエージェントでは `decisionSchema` や `dependents`、`dependentNames` などの関数を使って、プロンプトを構成します。
-`dependents` では、このプロンプトに依存しているものの `ref` と同じ内容が入ったsliceが返されます。
-`dependentNames` は、このプロンプトに依存しているプロンプトの名前のsliceが返されます。
-`decisionSchema` は、選択肢の[]stringを受け取り、それを元にこのAgentが期待するjson schemaを返します。
+This agent uses functions like `decisionSchema`, `dependents`, and `dependentNames` to construct the prompt.
+`dependents` returns a slice with the same content as `ref` for those dependent on this prompt.
+`dependentNames` returns a slice of the names of the prompts dependent on this prompt.
+`decisionSchema` takes a []string of choices and returns the JSON schema expected by this agent.
 
-`decisionSchema`に従ったJSONとどのように選択するか？の方針を書くことで、LLMを使って意思決定させます。
+By writing the JSON according to `decisionSchema` and the policy on how to select, you can use LLM to make decisions.
 
 #### `constant`
 
-描画された内容をそのまま出力とします。ワークフローの合流系とかで使用することを想定しています。
+Outputs the rendered content as is. It is intended to be used at workflow merge points.
 
 ```
 {{ define "config" }}
@@ -366,7 +365,7 @@ Sunny
 ```
 
 
-## 使い方 (ライブラリとして)
+## Usage (as a library)
 
 ```go
 package main
@@ -405,9 +404,26 @@ func main() {
 }
 ```
 
-- `command1` - コマンド1の説明
-- `command2` - コマンド2の説明ggg
+You can also implement `Agent` and `ModelProvider` independently.
 
-## ライセンス
+```go
+type MyAgent struct {
+	estellm.Agent 
+}
+
+estellm.RegisterAgent("myagent", func(ctx context.Context, p *estellm.Prompt) (estellm.Agent, error) {
+	return &MyAgent{}, nil
+})
+```
+
+```go
+type MyModelProvider struct {
+	estellm.ModelProvider 
+}
+
+estellm.RegisterModelProvider("mymodelprovider", &MyModelProvider{})
+```
+
+## License
 
 MIT
