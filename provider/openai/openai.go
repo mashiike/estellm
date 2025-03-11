@@ -366,6 +366,8 @@ func toolCall(ctx context.Context, tools estellm.ToolSet, toolUseID string, tool
 	for _, tool := range tools {
 		if tool.Name() == toolName {
 			w := estellm.NewBatchResponseWriter()
+			ctx = estellm.WithToolName(ctx, toolName)
+			ctx = estellm.WithToolUseID(ctx, toolUseID)
 			if err := tool.Call(ctx, v, w); err != nil {
 				return newToolResultWithError(toolUseID, err), nil
 			}
