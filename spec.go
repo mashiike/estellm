@@ -1,8 +1,12 @@
-package remote
+package estellm
 
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
+
+	"github.com/Songmu/flextime"
 )
 
 type Specification struct {
@@ -18,7 +22,7 @@ type Specification struct {
 	Extra json.RawMessage `json:"-,omitempty"`
 }
 
-var DefaultSpecificationPath = "/.well-known/bedrock-tool-specification"
+var DefaultSpecificationPath = "/.well-known/estellm-tool-specification"
 
 func (s *Specification) UnmarshalJSON(data []byte) error {
 	type alias Specification
@@ -61,3 +65,54 @@ func (s *Specification) MarshalJSON() ([]byte, error) {
 	data["worker_endpoint"] = s.WorkerEndpoint
 	return json.Marshal(data)
 }
+
+type SpecificationCache struct {
+	mu             sync.RWMutex
+	cache          map[string]Specification
+	cacheAt        map[string]time.Time
+	expireDuration time.Duration
+}
+
+func NewSpecificationCache(expireDuration time.Duration) *SpecificationCache {
+	return &SpecificationCache{
+		cache:          make(map[string]Specification),
+		cacheAt:        make(map[string]time.Time),
+		expireDuration: expireDuration,
+	}
+}
+
+func (sc *SpecificationCache) Get(name string) (Specification, bool) {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	spec, ok := sc.cache[name]
+	if !ok {
+		return Specification{}, false
+	}
+	at, ok := sc.cacheAt[name]
+	if !ok {
+		return Specification{}, false
+	}
+	if flextime.Since(at) > sc.expireDuration {
+		sc.mu.RUnlock()
+		sc.Delete(name)
+		sc.mu.RLock()
+		return Specification{}, false
+	}
+	return spec, ok
+}
+
+func (sc *SpecificationCache) Set(name string, spec Specification) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.cache[name] = spec
+	sc.cacheAt[name] = flextime.Now()
+}
+
+func (sc *SpecificationCache) Delete(name string) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	delete(sc.cache, name)
+	delete(sc.cacheAt, name)
+}
+
+var DefaultSpecificationCache = NewSpecificationCache(15 * time.Minute)

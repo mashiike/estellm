@@ -19,6 +19,12 @@ type Prompt struct {
 	reg            *Registry
 }
 
+func newEmptyPrompt(cfg *Config) *Prompt {
+	return &Prompt{
+		cfg: cfg,
+	}
+}
+
 func (p *Prompt) Name() string {
 	return p.cfg.Name
 }
@@ -48,7 +54,10 @@ var (
 )
 
 func (p *Prompt) Blocks() []string {
-	var blocks []string
+	blocks := make([]string, 0)
+	if p.tmpl == nil {
+		return []string{}
+	}
 	for _, t := range p.tmpl.Templates() {
 		if path.Base(p.cfg.PromptPath) != t.ParseName {
 			continue
