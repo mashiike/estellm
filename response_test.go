@@ -31,7 +31,7 @@ func TestResponseTemplateData(t *testing.T) {
 		},
 	}
 
-	data := resp.TemplateData()
+	data := resp.templateData()
 	assert.Equal(t, `part1{"key": "value"}`+"\n", data.String())
 	assert.Equal(t, "value", data["key"])
 }

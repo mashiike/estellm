@@ -40,7 +40,7 @@ func (r *Response) String() string {
 	return sb.String()
 }
 
-func (r *Response) TemplateData() responseTemplateData {
+func (r *Response) templateData() responseTemplateData {
 	if r.tmpl == nil {
 		r.tmpl = make(responseTemplateData)
 	}
