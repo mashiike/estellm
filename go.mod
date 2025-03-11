@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/Songmu/flextime v0.1.0
 	github.com/alecthomas/kong v1.9.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.9
@@ -11,6 +12,8 @@ require (
 	github.com/aws/smithy-go v1.22.3
 	github.com/fatih/color v1.18.0
 	github.com/google/go-jsonnet v0.20.0
+	github.com/invopop/jsonschema v0.13.0
+	github.com/mashiike/bedrocktool v0.7.1
 	github.com/mashiike/go-jsonnet-alias-importer v0.1.0
 	github.com/mashiike/slogutils v0.4.0
 	github.com/sashabaranov/go-openai v1.38.0
@@ -34,10 +37,13 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.25.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.29.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.17 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dmarkham/enumer v1.5.11 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
+	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
@@ -47,6 +53,7 @@ require (
 	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
+	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	golang.org/x/crypto v0.35.0 // indirect

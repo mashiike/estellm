@@ -49,3 +49,10 @@ func (r *Request) TemplateData() map[string]any {
 		"include_downstream": r.IncludeDownstream,
 	}
 }
+
+func (r *Request) AddTool(t Tool, tools ...Tool) {
+	r.Tools = r.Tools.Append(t)
+	if len(tools) > 0 {
+		r.Tools = r.Tools.Append(tools...)
+	}
+}
