@@ -70,6 +70,7 @@ func (c *CLI) Run(ctx context.Context) int {
 		kong.Name("estellm"),
 		kong.Description("Estellm is a tool for llm agetnts flow control."),
 		kong.UsageOnError(),
+		kong.Vars{"version": estellm.Version},
 	)
 	logLevel := slog.LevelInfo
 	if c.Debug {
