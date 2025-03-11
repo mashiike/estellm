@@ -57,6 +57,8 @@ func (trc ToolResultContent) MarshalPart() (ContentPart, error) {
 		return TextPart(trc.Text), nil
 	case "json":
 		return TextPart(trc.JSON), nil
+	case "reasoning":
+		return ReasoningPart(trc.Text), nil
 	case "document":
 		mimeType := trc.Format
 		switch mimeType {
@@ -135,6 +137,9 @@ func (trc *ToolResultContent) UnmarshalPart(part ContentPart) error {
 			return fmt.Errorf("unsupported binary type: %s", part.MIMEType)
 		}
 		trc.Source = part.Data
+	case PartTypeReasoning:
+		trc.Type = "reasoning"
+		trc.Text = part.Text
 	default:
 		return fmt.Errorf("unsupported content type: %s", part.Type)
 	}

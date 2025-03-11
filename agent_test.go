@@ -126,6 +126,7 @@ func TestNewAgentMux__Execute(t *testing.T) {
 		"weather",
 		"return weather",
 		func(ctx context.Context, input searchInput, w estellm.ResponseWriter) error {
+			w.WritePart(estellm.ReasoningPart("call weather tool on remote"))
 			w.WritePart(estellm.TextPart("sunny"))
 			w.Finish(estellm.FinishReasonEndTurn, "finish")
 			return nil
