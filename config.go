@@ -100,7 +100,7 @@ func (cfg *Config) Dependents() []string {
 func (cfg *Config) Decode(v any) error {
 	vm := cfg.vm
 	if vm == nil {
-		vm = jsonnet.MakeVM()
+		vm = makeVM()
 	}
 	jsonStr, err := vm.EvaluateAnonymousSnippet(cfg.PromptPath+".jsonnet", cfg.Raw)
 	if err != nil {
