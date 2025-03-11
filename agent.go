@@ -257,7 +257,7 @@ func (mux *AgentMux) Execute(ctx context.Context, req *Request, w ResponseWriter
 
 func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string, req *Request, w ResponseWriter) error {
 	done := make(map[string]bool, len(graph))
-	skiped := make(map[string]bool, len(graph))
+	skipped := make(map[string]bool, len(graph))
 	sortedNodes, err := topologicalSort(graph)
 	if err != nil {
 		return fmt.Errorf("topological sort: %w", err)
@@ -279,14 +279,14 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 			if len(cfg.DependsOn) > 0 {
 				allSkiped := true
 				for _, dep := range cfg.DependsOn {
-					if !skiped[dep] {
+					if !skipped[dep] {
 						allSkiped = false
 						break
 					}
 				}
 				if allSkiped {
 					mux.logger.DebugContext(ctx, "skip node", "node", node)
-					skiped[node] = true
+					skipped[node] = true
 					done[node] = true
 					continue
 				}
@@ -317,12 +317,12 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 				}
 			}
 			if len(execTargets) == 0 {
-				mux.logger.WarnContext(ctx, "next node all skiped", "targets", skipTargets)
-				w.Finish(FinishReasonEndTurn, "agents all skiped")
+				mux.logger.WarnContext(ctx, "next node all skipped", "targets", skipTargets)
+				w.Finish(FinishReasonEndTurn, "agents all skipped")
 				return nil
 			}
 			for _, target := range skipTargets {
-				skiped[target] = true
+				skipped[target] = true
 				done[target] = true
 			}
 		}

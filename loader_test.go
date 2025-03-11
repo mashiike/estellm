@@ -87,9 +87,9 @@ func TestLoader(t *testing.T) {
 				},
 			},
 		}
-		renderd, err := p.Render(ctx, req)
+		rendered, err := p.Render(ctx, req)
 		require.NoError(t, err)
-		g.Assert(t, "rendered", []byte(renderd))
+		g.Assert(t, "rendered", []byte(rendered))
 		system, messages, err := p.Decode(ctx, req)
 		require.NoError(t, err)
 		g.Assert(t, "decoded_system_prompt", []byte(system))
@@ -126,9 +126,9 @@ func TestLoader(t *testing.T) {
 		g.Assert(t, "pre_render", []byte(p.PreRendered()))
 		req, err := estellm.NewRequest("hoge", map[string]interface{}{})
 		require.NoError(t, err)
-		renderd, err := p.Render(ctx, req)
+		rendered, err := p.Render(ctx, req)
 		require.NoError(t, err)
-		g.Assert(t, "rendered", []byte(renderd))
+		g.Assert(t, "rendered", []byte(rendered))
 		require.ElementsMatch(t, []string{"dummy_block"}, p.Blocks())
 	})
 	t.Run("before1", func(t *testing.T) {
@@ -152,9 +152,9 @@ func TestLoader(t *testing.T) {
 		g.Assert(t, "pre_render", []byte(p.PreRendered()))
 		req, err := estellm.NewRequest("before1", map[string]interface{}{})
 		require.NoError(t, err)
-		renderd, err := p.Render(ctx, req)
+		rendered, err := p.Render(ctx, req)
 		require.NoError(t, err)
-		g.Assert(t, "rendered", []byte(renderd))
+		g.Assert(t, "rendered", []byte(rendered))
 		require.ElementsMatch(t, []string{}, p.Blocks())
 	})
 }
