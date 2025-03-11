@@ -22,40 +22,154 @@ func NewMessageDecoder(r io.Reader) *MessageDecoder {
 	}
 }
 
-func (d *MessageDecoder) Decode() (string, []Message, error) {
-	result := make([]Message, 0)
-	current := Message{
-		Parts: make([]ContentPart, 0),
-	}
+type decodeState struct {
+	textBuffer           *strings.Builder
+	enc                  *xml.Encoder
+	current              Message
+	lastChangeRole       string
+	lastRoleChangeOffset int64
+	result               []Message
+}
+
+func newDecodeState() *decodeState {
 	var textBuffer strings.Builder
 	enc := xml.NewEncoder(&textBuffer)
-	fulashTextBuffer := func() {
-		if textBuffer.Len() > 0 {
-			text := strings.TrimSpace(textBuffer.String())
-			if len(text) > 0 {
-				current.Parts = append(current.Parts, ContentPart{
-					Type: PartTypeText,
-					Text: text,
-				})
-			}
-			textBuffer.Reset()
+	return &decodeState{
+		textBuffer: &textBuffer,
+		enc:        enc,
+		current: Message{
+			Parts: make([]ContentPart, 0),
+		},
+		result: make([]Message, 0),
+	}
+}
+
+func (s *decodeState) fulashTextBuffer() {
+	if s.textBuffer.Len() > 0 {
+		text := strings.TrimSpace(s.textBuffer.String())
+		if len(text) > 0 {
+			s.current.Parts = append(s.current.Parts, ContentPart{
+				Type: PartTypeText,
+				Text: text,
+			})
+		}
+		s.textBuffer.Reset()
+	}
+}
+
+func (s *decodeState) changeRole(role string) {
+	if s.current.Role != role && s.lastChangeRole != role {
+		s.fulashTextBuffer()
+		if len(s.current.Parts) > 0 {
+			s.result = append(s.result, s.current)
+		}
+		s.lastChangeRole = role
+		s.current = Message{
+			Role:  role,
+			Parts: make([]ContentPart, 0),
 		}
 	}
-	var lastChangeRole string
-	changeRole := func(role string) {
-		if current.Role != role && lastChangeRole != role {
-			fulashTextBuffer()
-			if len(current.Parts) > 0 {
-				result = append(result, current)
+}
+
+func (s *decodeState) decodeToken(t xml.Token, inputOffset int64) error {
+	switch se := t.(type) {
+	case xml.CharData:
+		s.textBuffer.WriteString(string(se))
+	case xml.StartElement:
+		switch {
+		case se.Name.Space == "role":
+			if se.Name.Local != RoleUser && se.Name.Local != RoleAssistant {
+				return fmt.Errorf("unsupported role: %s", se.Name.Local)
 			}
-			lastChangeRole = role
-			current = Message{
-				Role:  role,
-				Parts: make([]ContentPart, 0),
+			s.changeRole(se.Name.Local)
+			s.lastRoleChangeOffset = inputOffset
+		case se.Name.Local == "binary":
+			var part ContentPart
+			for _, attr := range se.Attr {
+				switch attr.Name.Local {
+				case "src":
+					var err error
+					part, err = ParseSrcURL(attr.Value)
+					if err != nil {
+						return err
+					}
+				}
 			}
+			if part.Type != PartTypeBinary {
+				return errors.New("invalid binary part")
+			}
+			s.fulashTextBuffer()
+			s.current.Parts = append(s.current.Parts, part)
+		default:
+			s.enc.EncodeToken(t)
+			s.enc.Flush()
+		}
+	case xml.EndElement:
+		switch {
+		case se.Name.Space == "role":
+			if s.lastRoleChangeOffset != inputOffset {
+				s.changeRole(RoleUser)
+			}
+		case se.Name.Local == "binary":
+			// do nothing
+		default:
+			s.enc.EncodeToken(t)
+			s.enc.Flush()
 		}
 	}
-	var lastRoleChangeOffset int64
+	return nil
+}
+
+func (s *decodeState) complete() (string, []Message, error) {
+	s.fulashTextBuffer()
+	if len(s.current.Parts) > 0 {
+		s.result = append(s.result, s.current)
+	}
+	if len(s.result) == 0 {
+		return "", nil, fmt.Errorf("no messages")
+	}
+	if len(s.result) == 1 {
+		s.result[0].Role = RoleUser
+		return "", s.result, nil
+	}
+	if s.result[1].Role == RoleAssistant {
+		s.result[0].Role = RoleUser
+		return "", s.result, nil
+	}
+	if slices.ContainsFunc(s.result[0].Parts, func(c ContentPart) bool {
+		return c.Type == PartTypeBinary
+	}) {
+		s.result[0].Role = RoleUser
+		if s.result[1].Role == RoleUser {
+			// merge user messages
+			s.result[0].Parts = append(s.result[0].Parts, s.result[1].Parts...)
+			s.result[1] = s.result[0]
+			s.result = s.result[1:]
+		}
+		return "", s.result, nil
+	}
+	onlyText := true
+	var systemPromptBuffer strings.Builder
+	for _, part := range s.result[0].Parts {
+		if part.Type != PartTypeText {
+			onlyText = false
+			break
+		}
+		systemPromptBuffer.WriteString(part.Text)
+	}
+	if !onlyText {
+		s.result[0].Role = RoleUser
+		return "", s.result, nil
+	}
+	systemPrompt := strings.TrimSpace(systemPromptBuffer.String())
+	if len(systemPrompt) == 0 {
+		return "", s.result, nil
+	}
+	return systemPrompt, s.result[1:], nil
+}
+
+func (d *MessageDecoder) Decode() (string, []Message, error) {
+	s := newDecodeState()
 	for {
 		t, err := d.dec.Token()
 		if err == io.EOF {
@@ -64,97 +178,11 @@ func (d *MessageDecoder) Decode() (string, []Message, error) {
 		if err != nil {
 			return "", nil, err
 		}
-		switch se := t.(type) {
-		case xml.CharData:
-			textBuffer.WriteString(string(se))
-		case xml.StartElement:
-			switch {
-			case se.Name.Space == "role":
-				if se.Name.Local != RoleUser && se.Name.Local != RoleAssistant {
-					return "", nil, fmt.Errorf("unsupported role: %s", se.Name.Local)
-				}
-				changeRole(se.Name.Local)
-				lastRoleChangeOffset = d.dec.InputOffset()
-			case se.Name.Local == "binary":
-				var part ContentPart
-				for _, attr := range se.Attr {
-					switch attr.Name.Local {
-					case "src":
-						var err error
-						part, err = ParseSrcURL(attr.Value)
-						if err != nil {
-							return "", nil, err
-						}
-					}
-				}
-				if part.Type != PartTypeBinary {
-					return "", nil, errors.New("invalid binary part")
-				}
-				fulashTextBuffer()
-				current.Parts = append(current.Parts, part)
-			default:
-				enc.EncodeToken(t)
-				enc.Flush()
-			}
-		case xml.EndElement:
-			switch {
-			case se.Name.Space == "role":
-				if lastRoleChangeOffset != d.dec.InputOffset() {
-					changeRole(RoleUser)
-				}
-			case se.Name.Local == "binary":
-				// do nothing
-			default:
-				enc.EncodeToken(t)
-				enc.Flush()
-			}
+		if err := s.decodeToken(t, d.dec.InputOffset()); err != nil {
+			return "", nil, err
 		}
 	}
-	fulashTextBuffer()
-	if len(current.Parts) > 0 {
-		result = append(result, current)
-	}
-	if len(result) == 0 {
-		return "", nil, fmt.Errorf("no messages")
-	}
-	if len(result) == 1 {
-		result[0].Role = RoleUser
-		return "", result, nil
-	}
-	if result[1].Role == RoleAssistant {
-		result[0].Role = RoleUser
-		return "", result, nil
-	}
-	if slices.ContainsFunc(result[0].Parts, func(c ContentPart) bool {
-		return c.Type == PartTypeBinary
-	}) {
-		result[0].Role = RoleUser
-		if result[1].Role == RoleUser {
-			// merge user messages
-			result[0].Parts = append(result[0].Parts, result[1].Parts...)
-			result[1] = result[0]
-			result = result[1:]
-		}
-		return "", result, nil
-	}
-	onlyText := true
-	var systemPromptBuffer strings.Builder
-	for _, part := range result[0].Parts {
-		if part.Type != PartTypeText {
-			onlyText = false
-			break
-		}
-		systemPromptBuffer.WriteString(part.Text)
-	}
-	if !onlyText {
-		result[0].Role = RoleUser
-		return "", result, nil
-	}
-	systemPrompt := strings.TrimSpace(systemPromptBuffer.String())
-	if len(systemPrompt) == 0 {
-		return "", result, nil
-	}
-	return systemPrompt, result[1:], nil
+	return s.complete()
 }
 
 func ParseSrcURL(srcURL string) (ContentPart, error) {
