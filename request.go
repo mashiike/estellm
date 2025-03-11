@@ -1,8 +1,7 @@
 package estellm
 
 import (
-	"encoding/json"
-
+	"github.com/mashiike/estellm/interanal/jsonutil"
 	"github.com/mashiike/estellm/metadata"
 )
 
@@ -37,12 +36,9 @@ func (r *Request) Clone() *Request {
 }
 
 func (r *Request) TemplateData() map[string]any {
-	payload := r.Payload
-	if bs, err := json.Marshal(r.Payload); err == nil {
-		var tmp any
-		if err := json.Unmarshal(bs, &tmp); err == nil {
-			payload = tmp
-		}
+	var payload any
+	if err := jsonutil.Remarshal(r.Payload, &payload); err != nil {
+		payload = r.Payload
 	}
 	return map[string]any{
 		"name":               r.Name,

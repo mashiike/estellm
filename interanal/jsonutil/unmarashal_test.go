@@ -1,4 +1,4 @@
-package decision
+package jsonutil
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtructFirstJSON(t *testing.T) {
+func TestUnmarshalFirstJSON(t *testing.T) {
 	cases := []struct {
 		name     string
 		bs       []byte
@@ -46,7 +46,7 @@ func TestExtructFirstJSON(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var v map[string]any
-			err := extructFirstJSON(tc.bs, &v)
+			err := UnmarshalFirstJSON(tc.bs, &v)
 			if tc.hasError {
 				require.Error(t, err)
 			} else {

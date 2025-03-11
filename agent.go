@@ -37,6 +37,7 @@ type AgentMux struct {
 	validate         func() error
 	logger           *slog.Logger
 	reg              *Registry
+	middleware       []func(next Agent) Agent
 }
 
 type newAgentMuxOptions struct {
@@ -166,6 +167,10 @@ func (mux *AgentMux) Validate() error {
 	return mux.validate()
 }
 
+func (mux *AgentMux) Use(middleware ...func(next Agent) Agent) {
+	mux.middleware = append(mux.middleware, middleware...)
+}
+
 func (mux *AgentMux) validateImpl() error {
 	merged := make(map[string][]string, len(mux.dependents))
 	for name, deps := range mux.dependents {
@@ -276,12 +281,18 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 					continue
 				}
 			}
-			var nextAgents []string
-			previousResults, nextAgents, err = mux.executeOne(ctx, cfg, node, req, w, previousResults, sinkNodes)
+			refined := mux.refineRequest(cfg, req)
+			refined.PreviousResults = previousResults
+			resp, err := mux.executeOne(ctx, cfg, refined, w, sinkNodes)
 			if err != nil {
 				return err
 			}
 			done[node] = true
+			if resp == nil {
+				continue
+			}
+			previousResults[node] = resp
+			nextAgents := resp.Metadata.GetStrings(metadataKeyNextAgents)
 			if len(nextAgents) == 0 {
 				continue
 			}
@@ -309,17 +320,42 @@ func (mux *AgentMux) executeGraph(ctx context.Context, graph map[string][]string
 	return nil
 }
 
-func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, node string, req *Request, w ResponseWriter, previousResults map[string]*Response, sinkNodes []string) (map[string]*Response, []string, error) {
-	agent, ok := mux.agents[node]
+func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, req *Request, w ResponseWriter, sinkNodes []string) (*Response, error) {
+	node := cfg.Name
+	agent, ok := mux.agents[cfg.Name]
 	if !ok {
-		return previousResults, nil, fmt.Errorf("agent `%s` not found", node)
+		return nil, fmt.Errorf("agent `%s` not found", node)
 	}
 	if !*cfg.Enabled {
-		return previousResults, nil, fmt.Errorf("prompt `%s` is disabled", node)
+		return nil, fmt.Errorf("prompt `%s` is disabled", node)
 	}
-	cloned := req.Clone()
-	cloned = mux.refineRequest(cfg, cloned)
-	cloned.PreviousResults = previousResults
+	for _, mw := range mux.middleware {
+		agent = mw(agent)
+	}
+	w.Metadata().MergeInPlace(cfg.ResponseMetadata)
+	mux.logger.DebugContext(ctx, "execute node", "node", node, "metadata", w.Metadata())
+	if slices.Contains(sinkNodes, node) {
+		if err := agent.Execute(ctx, req, w); err != nil {
+			return nil, fmt.Errorf("execute `%s`: %w", node, err)
+		}
+		return nil, nil
+	}
+	batchWriter := NewBatchResponseWriter()
+	mw := NewReasoningMirrorResponseWriter(batchWriter, w)
+	if err := agent.Execute(ctx, req, mw); err != nil {
+		return nil, fmt.Errorf("execute `%s`: %w", node, err)
+	}
+	resp := batchWriter.Response()
+	return resp, nil
+}
+
+func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
+	if req == nil {
+		return nil
+	}
+	req = req.Clone()
+	req.Name = cfg.Name
+	req.Metadata = req.Metadata.Merge(cfg.RequestMetadata)
 	tools := make(ToolSet, 0, len(cfg.Tools))
 	for _, tool := range cfg.Tools {
 		toolPrompt, ok := mux.prompts[tool]
@@ -337,29 +373,7 @@ func (mux *AgentMux) executeOne(ctx context.Context, cfg *Config, node string, r
 			mux,
 		))
 	}
-	cloned.Tools = cloned.Tools.Append(tools...)
-	w.Metadata().MergeInPlace(cfg.ResponseMetadata)
-	if slices.Contains(sinkNodes, node) {
-		if err := agent.Execute(ctx, cloned, w); err != nil {
-			return nil, nil, fmt.Errorf("execute `%s`: %w", node, err)
-		}
-		return previousResults, nil, nil
-	}
-	batchWriter := NewBatchResponseWriter()
-	mw := NewReasoningMirrorResponseWriter(batchWriter, w)
-	if err := agent.Execute(ctx, cloned, mw); err != nil {
-		return previousResults, nil, fmt.Errorf("execute `%s`: %w", node, err)
-	}
-	resp := batchWriter.Response()
-	previousResults[node] = resp
-	return previousResults, resp.Metadata.GetStrings(metadataKeyNextAgents), nil
-}
-
-func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
-	if req == nil {
-		return nil
-	}
-	req.Metadata = req.Metadata.Merge(cfg.RequestMetadata)
+	req.Tools = req.Tools.Append(tools...)
 	return req
 }
 

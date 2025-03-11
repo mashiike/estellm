@@ -184,3 +184,27 @@ func (m *Metadata) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+func SetInputTokens(metadata Metadata, tokens int64) {
+	metadata.SetInt64("Usage-Input-Tokens", tokens)
+}
+
+func SetOutputTokens(metadata Metadata, tokens int64) {
+	metadata.SetInt64("Usage-Output-Tokens", tokens)
+}
+
+func SetTotalTokens(metadata Metadata, tokens int64) {
+	metadata.SetInt64("Usage-Total-Tokens", tokens)
+}
+
+func GetInputTokens(metadata Metadata) (int64, bool) {
+	return metadata.GetInt64("Usage-Input-Tokens")
+}
+
+func GetOutputTokens(metadata Metadata) (int64, bool) {
+	return metadata.GetInt64("Usage-Output-Tokens")
+}
+
+func GetTotalTokens(metadata Metadata) (int64, bool) {
+	return metadata.GetInt64("Usage-Total-Tokens")
+}

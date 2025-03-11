@@ -125,6 +125,7 @@ func TestNewAgentMux__Execute(t *testing.T) {
 		payload         any
 		includeUpstream bool
 		skipStructure   bool
+		middleware      []func(next estellm.Agent) estellm.Agent
 	}{
 		{
 			name:     "simple",
@@ -159,6 +160,23 @@ func TestNewAgentMux__Execute(t *testing.T) {
 			prompts:  "testdata/decision/prompts",
 			start:    "main",
 		},
+		{
+			name:          "decision_middlewares",
+			includes:      "testdata/decision/includes",
+			prompts:       "testdata/decision/prompts",
+			start:         "main",
+			skipStructure: true,
+			middleware: []func(next estellm.Agent) estellm.Agent{
+				func(next estellm.Agent) estellm.Agent {
+					return estellm.AgentFunc(func(ctx context.Context, req *estellm.Request, rw estellm.ResponseWriter) error {
+						w := estellm.ResponseWriterToWriter(rw)
+						fmt.Fprintf(&executionHistory, "middleware1 \n")
+						fmt.Fprintf(w, "middleware1 \n")
+						return next.Execute(ctx, req, rw)
+					})
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -169,6 +187,7 @@ func TestNewAgentMux__Execute(t *testing.T) {
 				estellm.WithPromptsFS(os.DirFS(c.prompts)),
 			)
 			require.NoError(t, err)
+			mux.Use(c.middleware...)
 			if !c.skipStructure {
 				g.Assert(t, c.name, []byte(mux.ToMarkdown()))
 			}

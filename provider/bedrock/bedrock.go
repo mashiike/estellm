@@ -3,6 +3,7 @@ package bedrock
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,11 +15,15 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/mashiike/estellm"
+	"github.com/mashiike/estellm/interanal/jsonutil"
 	"github.com/mashiike/estellm/metadata"
 )
 
@@ -28,6 +33,7 @@ func init() {
 }
 
 type BedrockAPIClient interface {
+	InvokeModel(ctx context.Context, input *bedrockruntime.InvokeModelInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.InvokeModelOutput, error)
 	ConverseStream(ctx context.Context, params *bedrockruntime.ConverseStreamInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseStreamOutput, error)
 }
 
@@ -196,7 +202,7 @@ func (p *ModelProvider) GenerateText(ctx context.Context, req *estellm.GenerateT
 			})
 		}
 	}
-	return p.generateTextSingleTurn(ctx, input, w, req.Tools)
+	return p.generateTextMultiTurn(ctx, input, w, req.Tools)
 }
 
 var (
@@ -215,7 +221,7 @@ func NormalizeToolName(input string) string {
 	return normalized
 }
 
-func (p *ModelProvider) generateTextSingleTurn(ctx context.Context, input *bedrockruntime.ConverseStreamInput, w estellm.ResponseWriter, tools estellm.ToolSet) error {
+func (p *ModelProvider) generateTextMultiTurn(ctx context.Context, input *bedrockruntime.ConverseStreamInput, w estellm.ResponseWriter, tools estellm.ToolSet) error {
 	slog.DebugContext(ctx, "converse stream", "input", input)
 	for {
 		select {
@@ -232,6 +238,9 @@ func (p *ModelProvider) generateTextSingleTurn(ctx context.Context, input *bedro
 		var msg types.Message
 		var currentContent types.ContentBlock
 		var toolInputBuilder bytes.Buffer
+		var inputTokens int64
+		var outputTokens int64
+		var totalTokens int64
 		for o := range output.GetStream().Events() {
 			switch v := o.(type) {
 			case *types.ConverseStreamOutputMemberContentBlockStart:
@@ -268,7 +277,22 @@ func (p *ModelProvider) generateTextSingleTurn(ctx context.Context, input *bedro
 				}
 				msg.Role = v.Value.Role
 			case *types.ConverseStreamOutputMemberMetadata:
-				setToMetadata(v.Value, w.Metadata())
+				m := w.Metadata()
+				setToMetadata(v.Value, m)
+				if v.Value.Usage != nil {
+					if v.Value.Usage.InputTokens != nil {
+						inputTokens += int64(*v.Value.Usage.InputTokens)
+						metadata.SetInputTokens(m, inputTokens)
+					}
+					if v.Value.Usage.OutputTokens != nil {
+						outputTokens += int64(*v.Value.Usage.OutputTokens)
+						metadata.SetOutputTokens(m, outputTokens)
+					}
+					if v.Value.Usage.TotalTokens != nil {
+						totalTokens += int64(*v.Value.Usage.TotalTokens)
+						metadata.SetTotalTokens(m, totalTokens)
+					}
+				}
 				slog.DebugContext(ctx, "metadata updated", "value", v.Value)
 			case *types.ConverseStreamOutputMemberMessageStop:
 				slog.Debug("message complete", "message", msg)
@@ -486,17 +510,6 @@ func setToMetadata(v types.ConverseStreamMetadataEvent, m metadata.Metadata) {
 			m.SetInt64("Metrics-Latency-Ms", *v.Metrics.LatencyMs)
 		}
 	}
-	if v.Usage != nil {
-		if v.Usage.InputTokens != nil {
-			m.SetInt64("Usage-Input-Tokens", int64(*v.Usage.InputTokens))
-		}
-		if v.Usage.OutputTokens != nil {
-			m.SetInt64("Usage-Output-Tokens", int64(*v.Usage.OutputTokens))
-		}
-		if v.Usage.TotalTokens != nil {
-			m.SetInt64("Usage-Total-Tokens", int64(*v.Usage.TotalTokens))
-		}
-	}
 	if v.Trace != nil {
 		if v.Trace.PromptRouter != nil {
 			if v.Trace.PromptRouter.InvokedModelId != nil {
@@ -623,10 +636,104 @@ func processContentBlockDelta(ctx context.Context, v *types.ConverseStreamOutput
 		return nil, fmt.Errorf("unsupported content block type: %T", v)
 	}
 }
+
 func (p *ModelProvider) GenerateImage(ctx context.Context, req *estellm.GenerateImageRequest, w estellm.ResponseWriter) error {
 	if err := p.initClient(); err != nil {
 		return err
 	}
-	// Implement the method
-	return estellm.ErrModelNotFound
+	imageReq := &StableDiffusionXLRequset{}
+	if err := jsonutil.Remarshal(req.ModelParams, imageReq); err != nil {
+		return fmt.Errorf("remarshal image request: %w", err)
+	}
+	var sb strings.Builder
+	enc := estellm.NewMessageEncoder(&sb)
+	enc.SkipReasoning()
+	enc.TextOnly()
+	enc.NoRole()
+	if err := enc.Encode(req.System, req.Messages); err != nil {
+		return fmt.Errorf("encode messages: %w", err)
+	}
+	prompt := strings.TrimSpace(sb.String())
+	var jsonPrompt StableDiffusionXLJSONPrompt
+	if err := jsonutil.UnmarshalFirstJSON([]byte(prompt), &jsonPrompt); err != nil {
+		return fmt.Errorf("unmarshal prompt: %w", err)
+	}
+	if jsonPrompt.Prompt == "" && jsonPrompt.NegativePrompt == "" {
+		imageReq.TextPrompts = []StableDiffusionXLTextPrompt{
+			{
+				Text:   prompt,
+				Weight: 1,
+			},
+		}
+	} else {
+		if jsonPrompt.Prompt != "" {
+			imageReq.TextPrompts = []StableDiffusionXLTextPrompt{
+				{
+					Text:   jsonPrompt.Prompt,
+					Weight: 1,
+				},
+			}
+		}
+		if jsonPrompt.NegativePrompt != "" {
+			imageReq.TextPrompts = append(imageReq.TextPrompts, StableDiffusionXLTextPrompt{
+				Text:   jsonPrompt.NegativePrompt,
+				Weight: -1,
+			})
+		}
+	}
+	if imageReq.StylePreset == "" && jsonPrompt.StylePreset != "" {
+		imageReq.StylePreset = jsonPrompt.StylePreset
+	}
+	bs, err := json.Marshal(imageReq)
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
+	w.WritePart(estellm.TextPart(fmt.Sprintf("<prompt type=\"provided\">%s</prompt>", prompt)))
+	output, err := p.client.InvokeModel(ctx, &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String(req.ModelID),
+		Body:        bs,
+		ContentType: aws.String("application/json"),
+		Accept:      aws.String("application/json"),
+	})
+	if err != nil {
+		slog.DebugContext(ctx, "invoke model request", "model_id", req.ModelID, "request", string(bs))
+		return fmt.Errorf("invoke model: %w", err)
+	}
+	resultMetadataToEstellmMetadata(output.ResultMetadata, w.Metadata())
+	var resp StableDiffusionXLResponse
+	if err := json.Unmarshal(output.Body, &resp); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	if resp.Result != "success" {
+		return fmt.Errorf("failed to generate image: %s", resp.Result)
+	}
+	for _, artifact := range resp.Artifacts {
+		if artifact.FinishReason == "ERROR" {
+			return fmt.Errorf("failed to generate image: %s", artifact.FinishReason)
+		}
+		if artifact.FinishReason == "CONTENT_FILTERED" {
+			w.WritePart(estellm.TextPart("<warn>generated image is content filtered,image might be blurred.</warn>"))
+		}
+		data, err := base64.StdEncoding.DecodeString(artifact.Base64)
+		if err != nil {
+			return fmt.Errorf("failed to decode image: %w", err)
+		}
+		w.WritePart(estellm.BinaryPart("image/png", data))
+	}
+	w.Finish(estellm.FinishReasonEndTurn, fmt.Sprintf("generate %d images", len(resp.Artifacts)))
+	return nil
+}
+
+func resultMetadataToEstellmMetadata(awsmeta middleware.Metadata, estellmMeta metadata.Metadata) {
+	resp, ok := awsmiddleware.GetRawResponse(awsmeta).(*smithyhttp.Response)
+	if !ok {
+		return
+	}
+	for key, values := range resp.Header {
+		if strings.Contains(key, "Bedrock") {
+			for _, value := range values {
+				estellmMeta.AddString(key, value)
+			}
+		}
+	}
 }

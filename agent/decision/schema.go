@@ -2,7 +2,7 @@ package decision
 
 import (
 	//for embedding output schema
-	"bytes"
+
 	_ "embed"
 	"encoding/json"
 	"maps"
@@ -40,16 +40,4 @@ func newOutputSchema(agents []string) map[string]any {
 	properties["next_agent"] = nextAgent
 	schema["properties"] = properties
 	return schema
-}
-
-func extructFirstJSON(bs []byte, v any) error {
-	var err error
-	for i := range bs {
-		dec := json.NewDecoder(bytes.NewReader(bs[i:]))
-		err = dec.Decode(v)
-		if err == nil {
-			return nil
-		}
-	}
-	return err
 }

@@ -3,6 +3,7 @@ package estellm
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -133,6 +134,7 @@ func (w *BatchResponseWriter) WritePart(parts ...ContentPart) error {
 func (w *BatchResponseWriter) Finish(reason FinishReason, msg string) error {
 	w.reason = reason
 	w.message = msg
+	slog.Debug("call finish", "reason", reason, "msg", msg, "metadata", w.metadata)
 	return nil
 }
 
@@ -237,6 +239,18 @@ func (w *ReasoningMirrorResponseWriter) WritePart(parts ...ContentPart) error {
 	for _, mirror := range w.mirrors {
 		if err := mirror.WritePart(mirrorParts...); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (w *ReasoningMirrorResponseWriter) Finish(reason FinishReason, msg string) error {
+	if err := w.ResponseWriter.Finish(reason, msg); err != nil {
+		return err
+	}
+	for k, v := range w.Metadata() {
+		for _, mirror := range w.mirrors {
+			mirror.Metadata()[k] = v
 		}
 	}
 	return nil

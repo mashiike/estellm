@@ -19,7 +19,6 @@ type CLI struct {
 	LogFormat string            `help:"Log format" enum:"json,text" default:"json"`
 	Color     bool              `help:"Enable color output" negatable:"" default:"true"`
 	Debug     bool              `help:"Enable debug mode" env:"DEBUG"`
-	Verbose   bool              `help:"Enable log verbose mode" env:"VERBOSE"`
 	ExtVar    map[string]string `help:"External variables external string values for Jsonnet" env:"EXT_VAR"`
 	ExtCode   map[string]string `help:"External code external string values for Jsonnet" env:"EXT_CODE"`
 	Project   string            `cmd:"" help:"Project directory" default:"./"`
@@ -77,9 +76,7 @@ func (c *CLI) Run(ctx context.Context) int {
 		logLevel = slog.LevelDebug
 	}
 	logger := newLogger(logLevel, c.LogFormat, c.Color)
-	if c.Verbose {
-		slog.SetDefault(logger)
-	}
+	slog.SetDefault(logger)
 	if err := c.run(ctx, k, logger); err != nil {
 		logger.Error("runtime error", "details", err)
 		return 1

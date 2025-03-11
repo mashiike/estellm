@@ -32,8 +32,9 @@ type ModelProvider interface {
 }
 
 type ModelProviderManager struct {
-	mu        sync.RWMutex
-	providers map[string]ModelProvider
+	mu          sync.RWMutex
+	providers   map[string]ModelProvider
+	middlewares []func(ModelProvider) ModelProvider
 }
 
 var (
@@ -88,6 +89,12 @@ func (m *ModelProviderManager) Clone() *ModelProviderManager {
 	return clone
 }
 
+func (m *ModelProviderManager) Use(middlewares ...func(ModelProvider) ModelProvider) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.middlewares = append(m.middlewares, middlewares...)
+}
+
 func NewModelProviderManager() *ModelProviderManager {
 	return &ModelProviderManager{
 		providers: make(map[string]ModelProvider),
@@ -120,9 +127,20 @@ func RegisterModelProvider(name string, provider ModelProvider) error {
 }
 
 func GetModelProvider(ctx context.Context, name string) (ModelProvider, error) {
-	modelProvider, ok := modelProviderManagerFromContext(ctx)
+	manager, ok := modelProviderManagerFromContext(ctx)
 	if !ok {
-		modelProvider = globalModelProviderManager
+		manager = globalModelProviderManager
 	}
-	return modelProvider.Get(name)
+	modelProvider, err := manager.Get(name)
+	if err != nil {
+		return nil, fmt.Errorf("model provider `%s`: %w", name, err)
+	}
+	for _, middleware := range manager.middlewares {
+		modelProvider = middleware(modelProvider)
+	}
+	return modelProvider, nil
+}
+
+func UserModelProviderMiddlewares(middlewares ...func(ModelProvider) ModelProvider) {
+	globalModelProviderManager.Use(middlewares...)
 }

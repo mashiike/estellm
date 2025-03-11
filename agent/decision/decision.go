@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/mashiike/estellm"
+	"github.com/mashiike/estellm/interanal/jsonutil"
 )
 
 const (
@@ -89,7 +90,7 @@ func (a *Agent) Execute(ctx context.Context, req *estellm.Request, w estellm.Res
 	}
 	resp := batch.Response()
 	var output DecisionOutput
-	if err := extructFirstJSON([]byte(resp.String()), &output); err != nil {
+	if err := jsonutil.UnmarshalFirstJSON([]byte(resp.String()), &output); err != nil {
 		return fmt.Errorf("extruct output: %w", err)
 	}
 	if output.Reasoning != "" {
@@ -108,5 +109,6 @@ func (a *Agent) Execute(ctx context.Context, req *estellm.Request, w estellm.Res
 		return errors.New("next_agent is empty")
 	}
 	estellm.SetNextAgents(w, nextAgent)
+	w.Finish(estellm.FinishReasonEndTurn, "select next agent")
 	return nil
 }
