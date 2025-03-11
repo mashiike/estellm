@@ -238,10 +238,11 @@ func NewAsReasoningResponseWriter(w ResponseWriter) *AsReasoningResponseWriter {
 func (w *AsReasoningResponseWriter) WritePart(parts ...ContentPart) error {
 	rewrite := make([]ContentPart, 0, len(parts))
 	for _, part := range parts {
+		rewrite = append(rewrite, part)
 		if part.Type == PartTypeText {
 			part.Type = PartTypeReasoning
+			rewrite = append(rewrite, part)
 		}
-		rewrite = append(rewrite, part)
 	}
 	return w.ResponseWriter.WritePart(rewrite...)
 }
