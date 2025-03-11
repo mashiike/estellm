@@ -123,6 +123,7 @@ func TestNewAgentMux__Execute(t *testing.T) {
 		prompts         string
 		start           string
 		payload         any
+		asReasoning     bool
 		includeUpstream bool
 		skipStructure   bool
 		middleware      []func(next estellm.Agent) estellm.Agent
@@ -177,9 +178,18 @@ func TestNewAgentMux__Execute(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:          "simple_output_as_reasoning",
+			includes:      "testdata/simple/includes",
+			prompts:       "testdata/simple/prompts",
+			start:         "start",
+			skipStructure: true,
+			asReasoning:   true,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("AS_REASONING", fmt.Sprint(c.asReasoning))
 			mux, err := estellm.NewAgentMux(
 				context.Background(),
 				estellm.WithRegistry(reg),
