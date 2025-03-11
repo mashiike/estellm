@@ -1,0 +1,15 @@
+{
+  "message": {
+    "role": "assistant",
+    "parts": [
+      {
+        "type": "reasoning",
+        "text": "decision main -\u003e task_a1"
+      },
+      {
+        "type": "text",
+        "text": "middleware1 \nexecute summary \n"
+      }
+    ]
+  }
+}

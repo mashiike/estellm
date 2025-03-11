@@ -1,0 +1,11 @@
+{
+  "message": {
+    "role": "assistant",
+    "parts": [
+      {
+        "type": "text",
+        "text": "execute tool_a \nexecute tool_b \nexecute main \n"
+      }
+    ]
+  }
+}

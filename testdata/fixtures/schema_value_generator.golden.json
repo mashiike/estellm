@@ -1,0 +1,16 @@
+{
+  "address": {
+    "city": "Tokyo",
+    "zip": 67
+  },
+  "age": 30,
+  "gender": "female",
+  "is_active": true,
+  "name": "John Doe",
+  "price": 65.1401718826794,
+  "tags": [
+    "tag-example",
+    "tag-example",
+    "tag-example"
+  ]
+}
