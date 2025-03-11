@@ -424,6 +424,99 @@ type MyModelProvider struct {
 estellm.RegisterModelProvider("mymodelprovider", &MyModelProvider{})
 ```
 
+## Remote Tool
+
+`estellm` provides a feature called RemoteTool, which allows you to implement tools over HTTP.
+The `estellm` package includes an implementation for using RemoteTool and providing RemoteToolHandler.
+For more details, refer to [RemoteTool](./_example/remote_tool).
+
+You can implement a server that provides a remote tool as follows:
+
+```go
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+
+	"github.com/mashiike/estellm"
+)
+
+type getExchangeRateInput struct {
+	BaseCurrency string `json:"base_currency" jsonschema:"title=base currency,description=The base currency,example=USD,default=USD"`
+}
+
+func main() {
+	var port int
+	flag.IntVar(&port, "port", 8088, "port number")
+	flag.Parse()
+	tool, err := estellm.NewTool(
+		"get_exchange_rate",
+		"Get current exchange rate",
+		func(ctx context.Context, input getExchangeRateInput, w estellm.ResponseWriter) error {
+			toolUseID, ok := estellm.ToolUseIDFromContext(ctx)
+			if !ok {
+				toolUseID = "<unknown>"
+			}
+			log.Printf("call get_exchange_rate tool: tool_use_id=%s, base_currency=%s", toolUseID, input.BaseCurrency)
+			resp, err := http.Get("https://api.exchangerate-api.com/v4/latest/USD")
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			bs, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			w.WritePart(estellm.TextPart(string(bs)))
+			w.Finish(estellm.FinishReasonEndTurn, http.StatusText(resp.StatusCode))
+			return nil
+		},
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	u, err := url.Parse(fmt.Sprintf("http://localhost:%d", port))
+	if err != nil {
+		log.Fatal(err)
+	}
+	handler, err := estellm.NewRemoteToolHandler(estellm.RemoteToolHandlerConfig{
+		Endpoint: u,
+		Tool:     tool,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("start server")
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), handler); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+This tool fetches and returns the current exchange rate.
+`estellm.NewTool` is a generic function that uses [github.com/invopop/jsonschema](https://github.com/invopop/jsonschema) to generate the JSON schema for the input from the struct.
+
+You can use this tool by specifying the endpoint in the tools section of each prompt.
+
+```md
+{{ define "config" }}
+local env = std.native('env');
+{
+    //...
+    tools: [
+        env("REMOTE_TOOL_URL", "http://localhost:8088"),
+    ],
+}
+{{ end }}
+// ...
+```
+
 ## License
 
 MIT

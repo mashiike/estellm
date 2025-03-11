@@ -48,7 +48,10 @@ var (
 )
 
 func (p *Prompt) Blocks() []string {
-	var blocks []string
+	blocks := make([]string, 0)
+	if p.tmpl == nil {
+		return []string{}
+	}
 	for _, t := range p.tmpl.Templates() {
 		if path.Base(p.cfg.PromptPath) != t.ParseName {
 			continue
@@ -71,6 +74,9 @@ func (p *Prompt) RenderBlock(_ context.Context, blockName string, req *Request) 
 	}
 	if !result.Valid() {
 		return "", &DataValidateError{Result: result}
+	}
+	if p.tmpl == nil {
+		return "", nil
 	}
 	tmpl := p.tmpl.Lookup(blockName)
 	if tmpl == nil {

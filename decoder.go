@@ -85,6 +85,7 @@ func (s *decodeState) decodeToken(t xml.Token, inputOffset int64) error {
 			s.lastRoleChangeOffset = inputOffset
 		case se.Name.Local == "binary":
 			var part ContentPart
+			var name string
 			for _, attr := range se.Attr {
 				switch attr.Name.Local {
 				case "src":
@@ -93,7 +94,12 @@ func (s *decodeState) decodeToken(t xml.Token, inputOffset int64) error {
 					if err != nil {
 						return err
 					}
+				case "name":
+					name = attr.Value
 				}
+			}
+			if name != "" {
+				part.Name = name
 			}
 			if part.Type != PartTypeBinary {
 				return errors.New("invalid binary part")

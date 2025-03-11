@@ -3,6 +3,10 @@ package estellm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+
+	"github.com/invopop/jsonschema"
+	"github.com/mashiike/estellm/interanal/jsonutil"
 )
 
 type Tool interface {
@@ -89,4 +93,87 @@ func (t *AgentTool) Call(ctx context.Context, input any, w ResponseWriter) error
 		return err
 	}
 	return nil
+}
+
+var (
+	toolUseIDContextKey = contextKey("tool_use_id")
+	toolNameContextKey  = contextKey("tool_name")
+)
+
+func WithToolUseID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, toolUseIDContextKey, id)
+}
+
+func ToolUseIDFromContext(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(toolUseIDContextKey).(string)
+	return id, ok
+}
+
+func WithToolName(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, toolNameContextKey, name)
+}
+
+func ToolNameFromContext(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(toolNameContextKey).(string)
+	return id, ok
+}
+
+func GenerateInputSchema[T any]() (map[string]any, error) {
+	var v T
+	r := jsonschema.Reflector{
+		DoNotReference: true,
+		ExpandedStruct: true,
+	}
+	schema := r.Reflect(v)
+	bs, err := json.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal schema: %w", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(bs, &m); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal schema: %w (schema=%q)", err, string(bs))
+	}
+	delete(m, "$schema")
+	delete(m, "$id")
+	return m, nil
+}
+
+type GenericTool[T any] struct {
+	name        string
+	description string
+	inputSchema map[string]any
+	caller      func(context.Context, T, ResponseWriter) error
+}
+
+func NewTool[T any](name, desc string, f func(context.Context, T, ResponseWriter) error) (*GenericTool[T], error) {
+	inputSchema, err := GenerateInputSchema[T]()
+	if err != nil {
+		return nil, err
+	}
+	return &GenericTool[T]{
+		name:        name,
+		description: desc,
+		inputSchema: inputSchema,
+		caller:      f,
+	}, nil
+}
+
+func (t *GenericTool[T]) Name() string {
+	return t.name
+}
+
+func (t *GenericTool[T]) Description() string {
+	return t.description
+}
+
+func (t *GenericTool[T]) InputSchema() map[string]any {
+	return t.inputSchema
+}
+
+func (t *GenericTool[T]) Call(ctx context.Context, input any, w ResponseWriter) error {
+	var value T
+	if err := jsonutil.Remarshal(input, &value); err != nil {
+		return err
+	}
+	return t.caller(ctx, value, w)
 }

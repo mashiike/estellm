@@ -11,6 +11,10 @@
     "role": "assistant",
     "parts": [
       {
+        "type": "reasoning",
+        "text": "call weather tool on remote"
+      },
+      {
         "type": "text",
         "text": "execute end \n"
       }

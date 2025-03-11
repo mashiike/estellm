@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -102,7 +103,7 @@ func (e *MessageEncoder) EncodeContentPart(part ContentPart) error {
 			return nil
 		}
 		if e.binaryOutputDir != "" {
-			filePath := fmt.Sprintf("%s/%s", e.binaryOutputDir, generateFileName(part.MIMEType))
+			filePath := fmt.Sprintf("%s/%s", e.binaryOutputDir, generateFileName(part.MIMEType, part.Name))
 			if err := writeFile(filePath, part.Data); err != nil {
 				return fmt.Errorf("write binary part to file: %w", err)
 			}
@@ -110,8 +111,12 @@ func (e *MessageEncoder) EncodeContentPart(part ContentPart) error {
 			return nil
 		}
 		dataURL := fmt.Sprintf("data:%s;base64,%s", part.MIMEType, base64.StdEncoding.EncodeToString(part.Data))
+		if part.Name != "" {
+			fmt.Fprintf(e.w, "<binary src=\"%s\" name=\"%s\"/>", dataURL, part.Name)
+			return nil
+		}
 		fmt.Fprintf(e.w, "<binary src=\"%s\"/>", dataURL)
-
+		return nil
 	case PartTypeReasoning:
 		if e.skipReasoning {
 			return nil
@@ -143,9 +148,14 @@ func (e *MessageEncoder) Flush() error {
 	return nil
 }
 
-func generateFileName(mimeType string) string {
+func generateFileName(mimeType string, name string) string {
 	ext := strings.Split(mimeType, "/")[1]
-	return fmt.Sprintf("%s.%s", generateRandomString(10), ext)
+	if name != "" {
+		name = strings.TrimSuffix(path.Base(name), path.Ext(name))
+	} else {
+		name = generateRandomString(10)
+	}
+	return fmt.Sprintf("%s.%s", name, ext)
 }
 
 func generateRandomString(n int) string {

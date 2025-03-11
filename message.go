@@ -26,6 +26,7 @@ const (
 type ContentPart struct {
 	Type     string `json:"type"`
 	Text     string `json:"text,omitempty"`
+	Name     string `json:"name,omitempty"`
 	MIMEType string `json:"mime_type,omitempty"`
 	Data     []byte `json:"data,omitempty"`
 }
@@ -40,4 +41,10 @@ func ReasoningPart(text string) ContentPart {
 
 func BinaryPart(mimeType string, data []byte) ContentPart {
 	return ContentPart{Type: PartTypeBinary, MIMEType: mimeType, Data: data}
+}
+
+func BinaryPartWithName(mimeType, name string, data []byte) ContentPart {
+	part := BinaryPart(mimeType, data)
+	part.Name = name
+	return part
 }
