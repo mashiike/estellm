@@ -8,10 +8,9 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.36.2
 	github.com/aws/aws-sdk-go-v2/config v1.29.7
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.25.0
-	github.com/dustin/go-humanize v1.0.1
+	github.com/aws/smithy-go v1.22.3
 	github.com/fatih/color v1.15.0
 	github.com/google/go-jsonnet v0.20.0
-	github.com/google/uuid v1.6.0
 	github.com/mashiike/go-jsonnet-alias-importer v0.1.0
 	github.com/mashiike/slogutils v0.4.0
 	github.com/sashabaranov/go-openai v1.38.0
@@ -35,9 +34,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.24.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.15 // indirect
-	github.com/aws/smithy-go v1.22.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dmarkham/enumer v1.5.11 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
