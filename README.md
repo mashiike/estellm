@@ -59,10 +59,10 @@ You can render and execute this prompt by providing the following JSON.
 {
   "numbers": [15,5,13,7,1]
 }
-
+```
 Rendering this prompt with the above payload will look like this.
 
-```sh
+```
 $ cat _example/simple/payload.json| go run cmd/estellm/main.go --project _example/simple render
 {"time":"2025-03-11T12:19:50.234501+09:00","level":"INFO","msg":"load prompts","prompts":"_example/simple/prompts","includes":"_example/simple/includes"}
 
@@ -82,7 +82,7 @@ You are an excellent calculation agent. Please check if the user's answer is cor
 
 And you can execute it as follows.
 
-```sh
+```
 $ cat _example/simple/payload.json| estellm --project _example/simple exec       
 {"time":"2025-03-11T12:16:35.504186+09:00","level":"INFO","msg":"load prompts","prompts":"_example/simple/prompts","includes":"_example/simple/includes"}
 The odd numbers in the group are 15, 5, 13, 7, and 1. 
