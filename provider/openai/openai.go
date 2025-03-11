@@ -25,24 +25,24 @@ func init() {
 	estellm.RegisterModelProvider("openai", &ModelProvider{})
 }
 
-type OpenAIClient interface {
+type Client interface {
 	CreateImage(ctx context.Context, request openai.ImageRequest) (openai.ImageResponse, error)
 	CreateChatCompletionStream(ctx context.Context, request openai.ChatCompletionRequest) (*openai.ChatCompletionStream, error)
 }
 
 type ModelProvider struct {
 	init    sync.Once
-	client  OpenAIClient
+	client  Client
 	initErr error
 	apiKey  string
 	baseURL string
 }
 
-func NewWithClient(client OpenAIClient) *ModelProvider {
+func NewWithClient(client Client) *ModelProvider {
 	return &ModelProvider{client: client}
 }
 
-func (p *ModelProvider) SetClilent(client OpenAIClient) {
+func (p *ModelProvider) SetClilent(client Client) {
 	p.client = client
 }
 
@@ -66,7 +66,7 @@ func (p *ModelProvider) initClient() error {
 	return p.initErr
 }
 
-func (p *ModelProvider) newClient(modelParams map[string]any) (OpenAIClient, error) {
+func (p *ModelProvider) newClient(modelParams map[string]any) (Client, error) {
 	var endpoint string
 	if str, ok := modelParams["endpoint"].(string); ok {
 		endpoint = str
@@ -183,7 +183,7 @@ func (p *ModelProvider) GenerateText(ctx context.Context, req *estellm.GenerateT
 	return p.generateTextMultiTrun(ctx, client, input, w, req.Tools)
 }
 
-func (p *ModelProvider) generateTextMultiTrun(ctx context.Context, client OpenAIClient, input openai.ChatCompletionRequest, w estellm.ResponseWriter, toolSet estellm.ToolSet) error {
+func (p *ModelProvider) generateTextMultiTrun(ctx context.Context, client Client, input openai.ChatCompletionRequest, w estellm.ResponseWriter, toolSet estellm.ToolSet) error {
 	for {
 		select {
 		case <-ctx.Done():
