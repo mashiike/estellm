@@ -27,6 +27,12 @@ func init() {
 	if err != nil {
 		panic(fmt.Sprintf("failed to set template funcs for agent %s: %v", AgentName, err))
 	}
+	err = estellm.SetAgentMarmaidNodeWrapper(AgentName, func(s string) string {
+		return fmt.Sprintf("{%s}", s)
+	})
+	if err != nil {
+		panic(fmt.Sprintf("failed to set marmaid node wrapper for agent %s: %v", AgentName, err))
+	}
 }
 
 type Config struct {

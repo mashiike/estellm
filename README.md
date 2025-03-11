@@ -139,7 +139,7 @@ flowchart TD
     A1[genimage_prompt]
     A2[question]
     A3[sdxl]
-    A4[selector]
+    A4{selector}
     A5[standard]
     A6[thinking]
     A7[weather]
