@@ -588,7 +588,7 @@ func processContentBlockStart(ctx context.Context, v *types.ConverseStreamOutput
 	}
 }
 
-func processContentBlockDelta(ctx context.Context, v *types.ConverseStreamOutputMemberContentBlockDelta, w estellm.ResponseWriter, toolInputBuilder *bytes.Buffer) (types.ContentBlock, error) {
+func processContentBlockDelta(_ context.Context, v *types.ConverseStreamOutputMemberContentBlockDelta, w estellm.ResponseWriter, toolInputBuilder *bytes.Buffer) (types.ContentBlock, error) {
 	switch v := v.Value.Delta.(type) {
 	case *types.ContentBlockDeltaMemberText:
 		if err := w.WritePart(estellm.TextPart(v.Value)); err != nil {
