@@ -100,7 +100,7 @@ The command help is as follows.
 $ estellm --help
 Usage: estellm <command> [flags]
 
-Estellm is a tool for llm agents flow control.
+Estellm is a tool for llm agetnts flow control.
 
 Flags:
   -h, --help                      Show context-sensitive help.
@@ -122,6 +122,9 @@ Commands:
 
   docs [flags]
     Show agents documentation
+
+  serve --transport="stdio" [flags]
+    Serve agents as MCP(Model Context Protocol) server
 
   version [flags]
     Show version
@@ -362,6 +365,70 @@ Cloudy
 {{- else -}}
 Sunny
 {{- end -}}
+```
+
+## Usage as MCP(Model Context Protocol) Server
+
+`estellm` can be used as an MCP server.
+The MCP server documentation is available [here](https://modelcontextprotocol.io/introduction)
+
+for example, you can start the server as follows.
+
+```sh
+$ estellm --project _example/mcp serve
+```
+
+if `publish` config in prompt is true, the prompt is registered in the MCP server.
+
+following is an example of publish as `prompts` capability
+
+```md
+{{ define "config" }}
+local env = std.native('env');
+{
+    type: "constant",
+    description: "This prompt is used to get the weather information.",
+    publish: true,
+    publish_types: ["prompt"],
+    arguments: [
+        {
+            name: "location",
+            description: "The name of the location to fetch the weather for",
+            required: true,
+        },
+    ],
+}
+{{ end }}
+// ...
+```
+
+if `publish_types` includes `prompt`, required `arguments` parameters and not specified `payload_schema`.
+
+following is an example of publish as `tool` capability
+
+
+```md
+{{ define "config" }}
+local env = std.native('env');
+{
+    type: "constant",
+    description: "This prompt is used to get the weather information.",
+    publish: true,
+    publish_types: ["tool"],
+    payload_schema: {
+        type: "object",
+        properties: {
+            location: { 
+                type: "string",
+                example: "Tokyo",
+                description: "The name of the location to fetch the weather for",
+            },
+        },
+        required: ["location"],
+    },
+}
+{{ end }}
+// ...
 ```
 
 

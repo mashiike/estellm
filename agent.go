@@ -513,3 +513,18 @@ func (mux *AgentMux) RenderConfig(_ context.Context, name string, isJsonnet bool
 	}
 	return string(bs), nil
 }
+
+func (mux *AgentMux) Published() map[string]*Config {
+	cfgs := make(map[string]*Config, len(mux.prompts))
+	for name, p := range mux.prompts {
+		cfg := p.Config()
+		if !*cfg.Enabled {
+			continue
+		}
+		if !cfg.Publish {
+			continue
+		}
+		cfgs[name] = cfg
+	}
+	return cfgs
+}

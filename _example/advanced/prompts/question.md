@@ -9,6 +9,7 @@ local payload_schema = import '@includes/payload_schema/question.libsonnet';
     tools: [
         "weather"
     ],
+    pubslish: true,
 }
 {{ end }}
 

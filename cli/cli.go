@@ -11,7 +11,9 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/fatih/color"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/mashiike/estellm"
+	"github.com/mashiike/estellm/mcp"
 	"github.com/mashiike/slogutils"
 )
 
@@ -27,6 +29,7 @@ type CLI struct {
 	Exec      ExecOption        `cmd:"" help:"Execute the estellm"`
 	Render    RenderOption      `cmd:"" help:"Render prompt/config the estellm"`
 	Docs      DocsOptoin        `cmd:"" help:"Show agents documentation"`
+	Serve     ServeOption       `cmd:"" help:"Serve agents as MCP(Model Context Protocol) server"`
 	Version   struct{}          `cmd:"" help:"Show version"`
 }
 
@@ -99,10 +102,29 @@ func (c *CLI) run(ctx context.Context, k *kong.Context, logger *slog.Logger) err
 	switch cmd {
 	case "exec <prompt-name>", "exec":
 		return c.runExec(ctx, mux)
-	case "render <prompt-name>", "render":
+	case "render", "render <prompt-name>", "render <prompt-name> <target>":
 		return c.runRender(ctx, mux)
 	case "docs":
 		return c.runDocs(ctx, mux)
+	case "serve":
+		serverVersion := estellm.Version
+		if c.Serve.Version != "" {
+			serverVersion = c.Serve.Version
+		}
+		s := mcp.NewServer(c.Serve.ServerName, serverVersion, mux)
+		switch c.Serve.Transport {
+		case "stdio":
+			slog.InfoContext(ctx, "start mcp server as stdio")
+			return s.ServeStdio()
+		case "sse":
+			serverOptions := []server.SSEOption{}
+			if c.Serve.BaseURL != "" {
+				serverOptions = append(serverOptions, server.WithBaseURL(c.Serve.BaseURL))
+			}
+			return s.ListenAndServeSSE(fmt.Sprintf(":%d", c.Serve.Port), serverOptions...)
+		default:
+			return fmt.Errorf("unknown transport: %s", c.Serve.Transport)
+		}
 	default:
 		return fmt.Errorf("unknown command: %s", k.Command())
 	}
@@ -257,4 +279,12 @@ type RenderOption struct {
 }
 
 type DocsOptoin struct {
+}
+
+type ServeOption struct {
+	Transport  string `help:"Transport type" enum:"stdio,sse" default:"stdio" required:"" env:"ESTELLM_TRANSPORT" short:"t"`
+	ServerName string `help:"Server name" default:"estellm" env:"ESTELLM_SERVER_NAME"`
+	Version    string `help:"Server version" default:"" env:"ESTELLM_SERVER_VERSION"`
+	Port       int    `help:"Server port" default:"8080" env:"ESTELLM_SERVER_PORT"`
+	BaseURL    string `help:"Server base URL" default:"" env:"ESTELLM_SERVER_BASE_URL"`
 }

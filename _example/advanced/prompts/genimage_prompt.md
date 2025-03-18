@@ -7,6 +7,7 @@ local payload_schema = import '@includes/payload_schema/question.libsonnet';
     model_id: "anthropic.claude-3-5-sonnet-20241022-v2:0",
     payload_schema: payload_schema,
     depends_on: ["selector"],
+    publish: true,
 }
 {{ end }}
 
