@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/invopop/jsonschema"
-	"github.com/mashiike/estellm/interanal/jsonutil"
+	"github.com/mashiike/estellm/jsonutil"
 )
 
 type Tool interface {

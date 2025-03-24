@@ -11,7 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mashiike/estellm"
-	"github.com/mashiike/estellm/interanal/jsonutil"
+	"github.com/mashiike/estellm/jsonutil"
 )
 
 type Config struct {

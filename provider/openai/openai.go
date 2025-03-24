@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/mashiike/estellm"
-	"github.com/mashiike/estellm/interanal/jsonutil"
+	"github.com/mashiike/estellm/jsonutil"
 	"github.com/mashiike/estellm/metadata"
 	"github.com/sashabaranov/go-openai"
 )
