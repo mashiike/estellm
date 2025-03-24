@@ -173,11 +173,11 @@ func newPromptHandler(cfg *estellm.Config, mux *estellm.AgentMux) server.PromptH
 		if err != nil {
 			return nil, fmt.Errorf("failed to create execution request: %w", err)
 		}
-		promptStr, err := mux.Render(ctx, req)
-		if err != nil {
+		w := estellm.NewBatchResponseWriter()
+		if err := mux.Execute(ctx, req, w); err != nil {
 			return nil, fmt.Errorf("failed to render prompt: %w", err)
 		}
-		dec := estellm.NewMessageDecoder(strings.NewReader(promptStr))
+		dec := estellm.NewMessageDecoder(strings.NewReader(w.Response().String()))
 		system, messages, err := dec.Decode()
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode prompt: %w", err)
