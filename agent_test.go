@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mashiike/estellm"
+	"github.com/mashiike/estellm/jsonutil"
 	"github.com/sebdah/goldie/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +73,7 @@ type searchInput struct {
 func TestNewAgentMux__Execute(t *testing.T) {
 	seed := [32]byte{1}
 	randReader := rand.New(rand.NewChaCha8(seed))
-	gen := estellm.NewSchemaValueGenerator(randReader)
+	gen := jsonutil.NewSchemaValueGenerator(randReader)
 	var executionHistory strings.Builder
 	reg := estellm.NewRegistry()
 	reg.Register("test_agent", estellm.NewAgentFunc(func(ctx context.Context, p *estellm.Prompt) (estellm.Agent, error) {
