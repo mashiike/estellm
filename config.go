@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/go-jsonnet"
+	"github.com/mashiike/estellm/jsonutil"
 	"github.com/mashiike/estellm/metadata"
 )
 
@@ -164,7 +165,7 @@ func (cfg *Config) Dependents() []string {
 func (cfg *Config) Decode(v any) error {
 	vm := cfg.vm
 	if vm == nil {
-		vm = makeVM()
+		vm = jsonutil.MakeVM()
 	}
 	jsonStr, err := vm.EvaluateAnonymousSnippet(cfg.PromptPath+".jsonnet", cfg.Raw)
 	if err != nil {

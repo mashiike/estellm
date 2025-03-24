@@ -1,4 +1,4 @@
-package estellm
+package jsonutil
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ var nativeFunctions = []*jsonnet.NativeFunction{
 	},
 }
 
-func makeVM() *jsonnet.VM {
+func MakeVM() *jsonnet.VM {
 	vm := jsonnet.MakeVM()
 	for _, f := range nativeFunctions {
 		vm.NativeFunction(f)
