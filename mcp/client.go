@@ -43,6 +43,7 @@ type ClientConfig struct {
 	Command  string            `json:"command"`
 	Env      map[string]string `json:"env"`
 	Args     []string          `json:"args"`
+	Header   map[string]string `json:"header"`
 }
 
 type ClientMux struct {
@@ -109,7 +110,7 @@ func prepareStdioClient(_ context.Context, c *Client) (*Client, error) {
 }
 
 func prepareSSEClient(_ context.Context, c *Client) (*Client, error) {
-	impl, err := client.NewSSEMCPClient(c.config.Endpoint)
+	impl, err := client.NewSSEMCPClient(c.config.Endpoint, client.WithHeaders(c.config.Header))
 	if err != nil {
 		return nil, err
 	}
@@ -289,10 +290,10 @@ func mcpContentToPart(content mcp.Content) (estellm.ContentPart, error) {
 		return part, nil
 	case mcp.EmbeddedResource:
 		switch resource := content.Resource.(type) {
-		case mcp.TextResourceContents:
+		case *mcp.TextResourceContents:
 			part = estellm.TextPart(resource.Text)
 			return part, nil
-		case mcp.BlobResourceContents:
+		case *mcp.BlobResourceContents:
 			data, err := base64.StdEncoding.DecodeString(resource.Blob)
 			if err != nil {
 				return part, fmt.Errorf("failed to decode base64 blob: %w", err)
