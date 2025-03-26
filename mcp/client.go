@@ -138,7 +138,10 @@ type Client struct {
 }
 
 func (c *Client) Close() error {
-	return nil
+	if c.impl == nil {
+		return nil
+	}
+	return c.impl.Close()
 }
 
 func (c *Client) init(ctx context.Context) error {
