@@ -176,35 +176,53 @@ func (c *Client) Tools(ctx context.Context) ([]estellm.Tool, error) {
 	}
 	ret := make([]estellm.Tool, 0, len(tools.Tools))
 	for _, tool := range tools.Tools {
+		slog.DebugContext(ctx, "found mcp tool", "name", tool.Name, "description", tool.Description, "raw_schema", string(tool.RawInputSchema), "schema", tool.InputSchema)
 		var s map[string]any
 		if len(tool.RawInputSchema) == 0 {
-			s = make(map[string]any)
+			if err := jsonutil.Remarshal(tool.InputSchema, &s); err != nil {
+				slog.WarnContext(ctx, "tool input schema is invalid", "schema", tool.InputSchema)
+				return nil, fmt.Errorf("failed to remarshal input schema for tool `%s`: %w", tool.Name, err)
+			}
 		} else {
 			if err := json.Unmarshal(tool.RawInputSchema, &s); err != nil {
 				slog.WarnContext(ctx, "tool input schema is invalid", "schema", string(tool.RawInputSchema))
 				return nil, fmt.Errorf("failed to unmarshal input schema for tool `%s`: %w", tool.Name, err)
 			}
 		}
-		slog.InfoContext(ctx, "found mcp tool", "name", tool.Name, "description", tool.Description)
+		if _, ok := s["type"]; !ok {
+			slog.WarnContext(ctx, "tool input schema is invalid", "schema", s)
+			s = map[string]any{
+				"type": "object",
+			}
+		}
+		if _, ok := s["properties"]; !ok {
+			s["properties"] = map[string]any{}
+		}
+		if _, ok := s["required"]; !ok {
+			s["required"] = []string{}
+		}
+		slog.InfoContext(ctx, "found mcp tool", "name", tool.Name, "description", tool.Description, "schema", s)
 		ret = append(ret, &mcpTool{
-			name:        fmt.Sprintf("%s@%s", tool.Name, c.config.Name),
-			desc:        tool.Description,
-			inputSchema: s,
-			impl:        c.impl,
+			mcpServerName: c.config.Name,
+			name:          tool.Name,
+			desc:          tool.Description,
+			inputSchema:   s,
+			impl:          c.impl,
 		})
 	}
 	return ret, nil
 }
 
 type mcpTool struct {
-	name        string
-	desc        string
-	inputSchema map[string]any
-	impl        client.MCPClient
+	mcpServerName string
+	name          string
+	desc          string
+	inputSchema   map[string]any
+	impl          client.MCPClient
 }
 
 func (t *mcpTool) Name() string {
-	return t.name
+	return fmt.Sprintf("%s@%s", t.name, t.mcpServerName)
 }
 
 func (t *mcpTool) Description() string {
@@ -229,6 +247,7 @@ func (t *mcpTool) Call(ctx context.Context, input any, w estellm.ResponseWriter)
 		return fmt.Errorf("failed to call tool `%s`: %w", t.name, err)
 	}
 	if res.IsError {
+		slog.WarnContext(ctx, "error calling tool", "name", t.name, "details", res.Content)
 		w.WritePart(estellm.TextPart(fmt.Sprintf("error calling tool `%s`: %s", t.name, res.Content)))
 		w.Finish(estellm.FinishReasonEndTurn, "error")
 		return nil
@@ -258,22 +277,22 @@ func (t *mcpTool) Call(ctx context.Context, input any, w estellm.ResponseWriter)
 func mcpContentToPart(content mcp.Content) (estellm.ContentPart, error) {
 	var part estellm.ContentPart
 	switch content := content.(type) {
-	case *mcp.TextContent:
+	case mcp.TextContent:
 		part = estellm.TextPart(content.Text)
 		return part, nil
-	case *mcp.ImageContent:
+	case mcp.ImageContent:
 		data, err := base64.StdEncoding.DecodeString(content.Data)
 		if err != nil {
 			return part, fmt.Errorf("failed to decode base64 image: %w", err)
 		}
 		part = estellm.BinaryPart(content.MIMEType, data)
 		return part, nil
-	case *mcp.EmbeddedResource:
+	case mcp.EmbeddedResource:
 		switch resource := content.Resource.(type) {
-		case *mcp.TextResourceContents:
+		case mcp.TextResourceContents:
 			part = estellm.TextPart(resource.Text)
 			return part, nil
-		case *mcp.BlobResourceContents:
+		case mcp.BlobResourceContents:
 			data, err := base64.StdEncoding.DecodeString(resource.Blob)
 			if err != nil {
 				return part, fmt.Errorf("failed to decode base64 blob: %w", err)

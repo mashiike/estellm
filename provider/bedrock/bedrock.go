@@ -3,7 +3,9 @@ package bedrock
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -216,7 +218,9 @@ func NormalizeToolName(input string) string {
 		normalized = normalized[:64]
 	}
 	if normalized == "" {
-		return "default_tool"
+		hash := sha256.Sum256([]byte(input))
+		hashStr := hex.EncodeToString(hash[:])
+		return "tool_" + hashStr[:8]
 	}
 	return normalized
 }

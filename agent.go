@@ -155,7 +155,6 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 	loader.NativeFunctions(o.nativeFunctions...)
 	loader.TemplateFuncs(o.templateFuncs)
 	loader.Registry(reg)
-	loader.ExternalToolNames(slices.Collect(maps.Keys(o.externalTools))...)
 	prompts, dependents, err := loader.LoadFS(ctx, o.promptsFs)
 	if err != nil {
 		return nil, err
@@ -171,20 +170,31 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		}
 		agents[name] = agent
 		cfg := p.Config()
-		toolsDepenedents[name] = cfg.Tools
-		for _, tool := range toolsDepenedents[name] {
+		for _, tool := range cfg.Tools {
 			if u, err := url.Parse(tool); err == nil && slices.Contains([]string{"http", "https"}, u.Scheme) {
 				remoteToolConfig := o.baseRmoteToolConfig
 				remoteToolConfig.Endpoint = tool
 				remoteToolConfigs[tool] = remoteToolConfig
+				toolsDepenedents[name] = append(toolsDepenedents[name], tool)
+				continue
+			}
+			if strings.Contains(tool, "*") {
+				matched, err := wildcardMatchs(tool, slices.Collect(maps.Keys(o.externalTools)))
+				if err != nil {
+					slog.WarnContext(ctx, "wildcard match failed", "tool", tool, "error", err)
+					continue
+				}
+				toolsDepenedents[name] = append(toolsDepenedents[name], matched...)
 				continue
 			}
 			if _, ok := o.externalTools[tool]; ok {
+				toolsDepenedents[name] = append(toolsDepenedents[name], tool)
 				continue
 			}
 			if _, ok := dependents[tool]; !ok {
 				return nil, fmt.Errorf("prompt `%s`: refarence `%s` as tool, but not found", name, tool)
 			}
+			toolsDepenedents[name] = append(toolsDepenedents[name], tool)
 		}
 		if cfg.Default {
 			if defaultAgent != "" {
@@ -427,7 +437,7 @@ func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
 	req.Name = cfg.Name
 	req.Metadata = req.Metadata.Merge(cfg.RequestMetadata)
 	tools := make(ToolSet, 0, len(cfg.Tools))
-	for _, tool := range cfg.Tools {
+	for _, tool := range mux.toolsDepenedents[cfg.Name] {
 		if _, ok := mux.remoteToolConfigs[tool]; ok {
 			remoteTool, err := mux.getRemoteTool(context.Background(), tool)
 			if err != nil {

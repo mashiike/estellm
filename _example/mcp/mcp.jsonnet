@@ -9,5 +9,11 @@ local projectRoot = std.extVar('projectRoot');
         projectRoot+"/docs"
       ],
     },
+    "fetch": {
+      command: "uvx",
+      args: [
+        "mcp-server-fetch"
+      ],
+    },
   },
 }
