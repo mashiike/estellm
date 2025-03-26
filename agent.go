@@ -266,9 +266,11 @@ func (mux *AgentMux) ToMarkdown() string {
 		sb.WriteString(fmt.Sprintf("    %s((Remote Tool %d))\n", nodesAlias[remoteTool], remoteToolIndex+1))
 		remoteToolIndex++
 	}
+	externalToolIndex := 0
 	for extenalTool := range mux.externalTools {
-		nodesAlias[extenalTool] = fmt.Sprintf("C%d", remoteToolIndex)
+		nodesAlias[extenalTool] = fmt.Sprintf("C%d", externalToolIndex)
 		sb.WriteString(fmt.Sprintf("    %s[(%s)]\n", nodesAlias[extenalTool], extenalTool))
+		externalToolIndex++
 	}
 	for _, node := range nodes {
 		deps := mux.dependents[node]

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/client"
@@ -146,15 +147,17 @@ func (c *Client) Close() error {
 
 func (c *Client) init(ctx context.Context) error {
 	c.onceInit.Do(func() {
+		slog.Info("initializing mcp client", "transport", c.transport, "server", c.config.Name)
 		initRequest := mcp.InitializeRequest{}
 		initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 		initRequest.Params.ClientInfo = mcp.Implementation{
 			Name:    "estellm",
-			Version: estellm.Version,
+			Version: strings.TrimPrefix(estellm.Version, "v"),
 		}
 		var initResult *mcp.InitializeResult
 		initResult, c.initErr = c.impl.Initialize(ctx, initRequest)
 		if c.initErr != nil {
+			slog.Warn("failed to initialize mcp client", "details", c.initErr)
 			return
 		}
 		slog.Info("initialized mcp client", "server", initResult.ServerInfo.Name, "version", initResult.ServerInfo.Version)
@@ -174,12 +177,17 @@ func (c *Client) Tools(ctx context.Context) ([]estellm.Tool, error) {
 	ret := make([]estellm.Tool, 0, len(tools.Tools))
 	for _, tool := range tools.Tools {
 		var s map[string]any
-		if err := json.Unmarshal(tool.RawInputSchema, &s); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal input schema for tool `%s`: %w", tool.Name, err)
+		if len(tool.RawInputSchema) == 0 {
+			s = make(map[string]any)
+		} else {
+			if err := json.Unmarshal(tool.RawInputSchema, &s); err != nil {
+				slog.WarnContext(ctx, "tool input schema is invalid", "schema", string(tool.RawInputSchema))
+				return nil, fmt.Errorf("failed to unmarshal input schema for tool `%s`: %w", tool.Name, err)
+			}
 		}
 		slog.InfoContext(ctx, "found mcp tool", "name", tool.Name, "description", tool.Description)
 		ret = append(ret, &mcpTool{
-			name:        tool.Name,
+			name:        fmt.Sprintf("%s@%s", tool.Name, c.config.Name),
 			desc:        tool.Description,
 			inputSchema: s,
 			impl:        c.impl,
