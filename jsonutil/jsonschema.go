@@ -1,4 +1,4 @@
-package estellm
+package jsonutil
 
 import (
 	"math/rand/v2"
@@ -19,7 +19,7 @@ func NewSchemaValueGenerator(r *rand.Rand) *SchemaValueGenerator {
 	}
 }
 
-var defaultSchemaValueGenerator = NewSchemaValueGenerator(nil)
+var DefaultSchemaValueGenerator = NewSchemaValueGenerator(nil)
 
 func (g *SchemaValueGenerator) intN(n int) int {
 	if g.r == nil {

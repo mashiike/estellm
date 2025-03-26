@@ -7,7 +7,7 @@ import (
 	"text/template"
 
 	"github.com/mashiike/estellm"
-	"github.com/mashiike/estellm/interanal/jsonutil"
+	"github.com/mashiike/estellm/jsonutil"
 )
 
 const (

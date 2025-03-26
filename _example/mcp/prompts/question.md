@@ -5,11 +5,13 @@ local payload_schema = import '@includes/payload_schema/question.libsonnet';
     description: "This agent is used for general purposes.",
     model_provider: "openai",
     model_id: "gpt-4o-mini",
+    default: true,
     payload_schema: payload_schema,
     tools: [
-        "weather"
+        "weather",
+        "*@filesystem",
+        "*@fetch",
     ],
-    publish: true,
 }
 {{ end }}
 

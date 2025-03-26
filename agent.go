@@ -37,6 +37,7 @@ type AgentMux struct {
 	remoteTools       map[string]*RemoteTool
 	remoteToolConfigs map[string]RemoteToolConfig
 	remoteToolMu      sync.Mutex
+	externalTools     map[string]Tool
 	isCycle           bool
 	validate          func() error
 	logger            *slog.Logger
@@ -54,6 +55,7 @@ type newAgentMuxOptions struct {
 	templateFuncs       template.FuncMap
 	logger              *slog.Logger
 	baseRmoteToolConfig RemoteToolConfig
+	externalTools       map[string]Tool
 }
 
 type NewAgentMuxOption func(*newAgentMuxOptions)
@@ -118,6 +120,14 @@ func WithRemoteToolConfig(cfg RemoteToolConfig) NewAgentMuxOption {
 	}
 }
 
+func WithExternalTools(tools ...Tool) NewAgentMuxOption {
+	return func(o *newAgentMuxOptions) {
+		for _, tool := range tools {
+			o.externalTools[tool.Name()] = tool
+		}
+	}
+}
+
 func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, error) {
 	o := newAgentMuxOptions{
 		registry:            defaultRegistory,
@@ -129,6 +139,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		templateFuncs:       template.FuncMap{},
 		logger:              slog.Default(),
 		baseRmoteToolConfig: RemoteToolConfig{},
+		externalTools:       make(map[string]Tool),
 	}
 	for _, fn := range optFns {
 		fn(&o)
@@ -159,17 +170,31 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		}
 		agents[name] = agent
 		cfg := p.Config()
-		toolsDepenedents[name] = cfg.Tools
-		for _, tool := range toolsDepenedents[name] {
+		for _, tool := range cfg.Tools {
 			if u, err := url.Parse(tool); err == nil && slices.Contains([]string{"http", "https"}, u.Scheme) {
 				remoteToolConfig := o.baseRmoteToolConfig
 				remoteToolConfig.Endpoint = tool
 				remoteToolConfigs[tool] = remoteToolConfig
+				toolsDepenedents[name] = append(toolsDepenedents[name], tool)
+				continue
+			}
+			if strings.Contains(tool, "*") {
+				matched, err := wildcardMatchs(tool, slices.Collect(maps.Keys(o.externalTools)))
+				if err != nil {
+					slog.WarnContext(ctx, "wildcard match failed", "tool", tool, "error", err)
+					continue
+				}
+				toolsDepenedents[name] = append(toolsDepenedents[name], matched...)
+				continue
+			}
+			if _, ok := o.externalTools[tool]; ok {
+				toolsDepenedents[name] = append(toolsDepenedents[name], tool)
 				continue
 			}
 			if _, ok := dependents[tool]; !ok {
 				return nil, fmt.Errorf("prompt `%s`: refarence `%s` as tool, but not found", name, tool)
 			}
+			toolsDepenedents[name] = append(toolsDepenedents[name], tool)
 		}
 		if cfg.Default {
 			if defaultAgent != "" {
@@ -185,6 +210,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		dependents:        dependents,
 		logger:            o.logger,
 		toolsDepenedents:  toolsDepenedents,
+		externalTools:     o.externalTools,
 		remoteToolConfigs: remoteToolConfigs,
 		remoteTools:       make(map[string]*RemoteTool),
 		reg:               reg,
@@ -249,6 +275,12 @@ func (mux *AgentMux) ToMarkdown() string {
 		remoteTools[remoteTool] = fmt.Sprintf("Remote Tool %d", remoteToolIndex+1)
 		sb.WriteString(fmt.Sprintf("    %s((Remote Tool %d))\n", nodesAlias[remoteTool], remoteToolIndex+1))
 		remoteToolIndex++
+	}
+	externalToolIndex := 0
+	for extenalTool := range mux.externalTools {
+		nodesAlias[extenalTool] = fmt.Sprintf("C%d", externalToolIndex)
+		sb.WriteString(fmt.Sprintf("    %s[(%s)]\n", nodesAlias[extenalTool], extenalTool))
+		externalToolIndex++
 	}
 	for _, node := range nodes {
 		deps := mux.dependents[node]
@@ -405,7 +437,7 @@ func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
 	req.Name = cfg.Name
 	req.Metadata = req.Metadata.Merge(cfg.RequestMetadata)
 	tools := make(ToolSet, 0, len(cfg.Tools))
-	for _, tool := range cfg.Tools {
+	for _, tool := range mux.toolsDepenedents[cfg.Name] {
 		if _, ok := mux.remoteToolConfigs[tool]; ok {
 			remoteTool, err := mux.getRemoteTool(context.Background(), tool)
 			if err != nil {
@@ -413,6 +445,10 @@ func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
 				continue
 			}
 			tools = tools.Append(remoteTool)
+			continue
+		}
+		if externalTool, ok := mux.externalTools[tool]; ok {
+			tools = tools.Append(externalTool)
 			continue
 		}
 		toolPrompt, ok := mux.prompts[tool]
@@ -512,4 +548,19 @@ func (mux *AgentMux) RenderConfig(_ context.Context, name string, isJsonnet bool
 		return "", err
 	}
 	return string(bs), nil
+}
+
+func (mux *AgentMux) Published() map[string]*Config {
+	cfgs := make(map[string]*Config, len(mux.prompts))
+	for name, p := range mux.prompts {
+		cfg := p.Config()
+		if !*cfg.Enabled {
+			continue
+		}
+		if !cfg.Publish {
+			continue
+		}
+		cfgs[name] = cfg
+	}
+	return cfgs
 }

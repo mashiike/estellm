@@ -1,7 +1,7 @@
 package estellm
 
 import (
-	"github.com/mashiike/estellm/interanal/jsonutil"
+	"github.com/mashiike/estellm/jsonutil"
 	"github.com/mashiike/estellm/metadata"
 )
 

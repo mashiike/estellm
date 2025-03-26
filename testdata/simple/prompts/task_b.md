@@ -1,6 +1,7 @@
 {{ define "config" }}
 {
-    type: "test_agent", 
+    type: "test_agent",
+    tools:["external_tool"], 
 }
 {{ end }}
 

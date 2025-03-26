@@ -11,7 +11,10 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/fatih/color"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/mashiike/estellm"
+	"github.com/mashiike/estellm/jsonutil"
+	"github.com/mashiike/estellm/mcp"
 	"github.com/mashiike/slogutils"
 )
 
@@ -19,6 +22,7 @@ type CLI struct {
 	LogFormat string            `help:"Log format" enum:"json,text" default:"json" env:"LOG_FORMAT"`
 	Color     bool              `help:"Enable color output" negatable:"" default:"true"`
 	Debug     bool              `help:"Enable debug mode" env:"DEBUG"`
+	MCPConfig string            `help:"MCP server configuration file path" env:"MCP_CONFIG" default:""`
 	ExtVar    map[string]string `help:"External variables external string values for Jsonnet" env:"EXT_VAR"`
 	ExtCode   map[string]string `help:"External code external string values for Jsonnet" env:"EXT_CODE"`
 	Project   string            `cmd:"" help:"Project directory" default:"./" env:"ESTELLM_PROJECT"`
@@ -27,6 +31,7 @@ type CLI struct {
 	Exec      ExecOption        `cmd:"" help:"Execute the estellm"`
 	Render    RenderOption      `cmd:"" help:"Render prompt/config the estellm"`
 	Docs      DocsOptoin        `cmd:"" help:"Show agents documentation"`
+	Serve     ServeOption       `cmd:"" help:"Serve agents as MCP(Model Context Protocol) server"`
 	Version   struct{}          `cmd:"" help:"Show version"`
 }
 
@@ -92,17 +97,53 @@ func (c *CLI) run(ctx context.Context, k *kong.Context, logger *slog.Logger) err
 		fmt.Printf("estellm version %s\n", estellm.Version)
 		return nil
 	}
-	mux, err := c.newAgentMux(ctx, logger)
+	var tools []estellm.Tool
+	mcpMux, ok, err := c.newMCPClientMux(ctx, logger)
+	if err != nil {
+		return fmt.Errorf("initialize mcp client mux: %w", err)
+	}
+	if ok {
+		tools, err = mcpMux.Tools(ctx)
+		if err != nil {
+			return fmt.Errorf("get mcp tools: %w", err)
+		}
+		defer func() {
+			if err := mcpMux.Close(); err != nil {
+				logger.Warn("close mcp client mux", "error", err)
+			}
+		}()
+	}
+	mux, err := c.newAgentMux(ctx, logger, tools)
 	if err != nil {
 		return fmt.Errorf("initialize: %w", err)
 	}
+
 	switch cmd {
 	case "exec <prompt-name>", "exec":
 		return c.runExec(ctx, mux)
-	case "render <prompt-name>", "render":
+	case "render", "render <prompt-name>", "render <prompt-name> <target>":
 		return c.runRender(ctx, mux)
 	case "docs":
 		return c.runDocs(ctx, mux)
+	case "serve":
+		serverVersion := estellm.Version
+		if c.Serve.Version != "" {
+			serverVersion = c.Serve.Version
+		}
+		s := mcp.NewServer(c.Serve.ServerName, serverVersion, mux)
+		switch c.Serve.Transport {
+		case "stdio":
+			slog.InfoContext(ctx, "start mcp server as stdio")
+			return s.ServeStdio()
+		case "sse":
+			serverOptions := []server.SSEOption{}
+			if c.Serve.BaseURL != "" {
+				serverOptions = append(serverOptions, server.WithBaseURL(c.Serve.BaseURL))
+			}
+			return s.ListenAndServeSSE(fmt.Sprintf(":%d", c.Serve.Port), serverOptions...)
+		default:
+			return fmt.Errorf("unknown transport: %s", c.Serve.Transport)
+		}
 	default:
 		return fmt.Errorf("unknown command: %s", k.Command())
 	}
@@ -188,7 +229,7 @@ func (c *CLI) runDocs(_ context.Context, mux *estellm.AgentMux) error {
 	return nil
 }
 
-func (c *CLI) newAgentMux(ctx context.Context, logger *slog.Logger) (*estellm.AgentMux, error) {
+func (c *CLI) newAgentMux(ctx context.Context, logger *slog.Logger, tools []estellm.Tool) (*estellm.AgentMux, error) {
 	promptsDir := filepath.Join(c.Project, c.Prompts)
 	includesDir := filepath.Join(c.Project, c.Includes)
 	logger.InfoContext(ctx, "load prompts", "prompts", promptsDir, "includes", includesDir)
@@ -199,6 +240,9 @@ func (c *CLI) newAgentMux(ctx context.Context, logger *slog.Logger) (*estellm.Ag
 	opts := []estellm.NewAgentMuxOption{
 		estellm.WithLogger(logger),
 		estellm.WithPromptsFS(promptsFS),
+	}
+	if len(tools) > 0 {
+		opts = append(opts, estellm.WithExternalTools(tools...))
 	}
 	if _, err := os.Stat(includesDir); err == nil {
 		includesFS := os.DirFS(includesDir)
@@ -211,6 +255,61 @@ func (c *CLI) newAgentMux(ctx context.Context, logger *slog.Logger) (*estellm.Ag
 		opts = append(opts, estellm.WithExtVars(c.ExtVar))
 	}
 	return estellm.NewAgentMux(ctx, opts...)
+}
+
+var defaultMCPConfigFiles = []string{
+	"mcp.json",
+	"mcp.jsonnet",
+	"claude_desktop_config.json",
+	"claude_desktop_config.jsonnet",
+}
+
+func (c *CLI) newMCPClientMux(ctx context.Context, logger *slog.Logger) (*mcp.ClientMux, bool, error) {
+	var paths []string
+	if c.MCPConfig != "" {
+		if filepath.IsAbs(c.MCPConfig) {
+			paths = append(paths, c.MCPConfig)
+		} else {
+			paths = append(paths, filepath.Join(c.Project, c.MCPConfig))
+		}
+	} else {
+		for _, f := range defaultMCPConfigFiles {
+			paths = append(paths, filepath.Join(c.Project, f))
+		}
+	}
+	var configPath string
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			configPath = p
+			break
+		}
+	}
+	if configPath == "" {
+		return nil, false, nil
+	}
+	logger.InfoContext(ctx, "load mcp config", "config", configPath)
+	vm := jsonutil.MakeVM()
+	for key, value := range c.ExtVar {
+		vm.ExtVar(key, value)
+	}
+	for key, value := range c.ExtCode {
+		vm.ExtCode(key, value)
+	}
+	vm.ExtVar("projectRoot", c.Project)
+	jsonStr, err := vm.EvaluateFile(configPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("evaluate jsonnet: %w", err)
+	}
+	var config mcp.Config
+	if err := json.Unmarshal([]byte(jsonStr), &config); err != nil {
+		return nil, false, fmt.Errorf("unmarshal config: %w", err)
+	}
+	logger.Debug("parsed mcp config", "config", config)
+	mux, err := mcp.NewClientMuxFromConfig(ctx, &config)
+	if err != nil {
+		return nil, false, fmt.Errorf("new client mux: %w", err)
+	}
+	return mux, true, nil
 }
 
 func (e *PromptOption) ParsePayload() (map[string]any, error) {
@@ -257,4 +356,12 @@ type RenderOption struct {
 }
 
 type DocsOptoin struct {
+}
+
+type ServeOption struct {
+	Transport  string `help:"Transport type" enum:"stdio,sse" default:"stdio" required:"" env:"ESTELLM_TRANSPORT" short:"t"`
+	ServerName string `help:"Server name" default:"estellm" env:"ESTELLM_SERVER_NAME"`
+	Version    string `help:"Server version" default:"" env:"ESTELLM_SERVER_VERSION"`
+	Port       int    `help:"Server port" default:"8080" env:"ESTELLM_SERVER_PORT"`
+	BaseURL    string `help:"Server base URL" default:"" env:"ESTELLM_SERVER_BASE_URL"`
 }

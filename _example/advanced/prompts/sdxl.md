@@ -14,6 +14,7 @@ local payload_schema = import '@includes/payload_schema/question.libsonnet';
         required: ["prompt"],
     },
     depends_on: ["selector"],
+    publish: true,
 }
 {{ end }}
 

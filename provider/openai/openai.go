@@ -2,7 +2,9 @@ package openai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,11 +13,12 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/mashiike/estellm"
-	"github.com/mashiike/estellm/interanal/jsonutil"
+	"github.com/mashiike/estellm/jsonutil"
 	"github.com/mashiike/estellm/metadata"
 	"github.com/sashabaranov/go-openai"
 )
@@ -87,6 +90,24 @@ func (p *ModelProvider) newClient(modelParams map[string]any) (Client, error) {
 		return openai.NewClientWithConfig(config), nil
 	}
 	return p.client, nil
+}
+
+var (
+	toolNameRe = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+)
+
+func NormalizeToolName(input string) string {
+	normalized := toolNameRe.ReplaceAllString(input, "_")
+	normalized = strings.Trim(normalized, "_")
+	if len(normalized) > 64 {
+		normalized = normalized[:64]
+	}
+	if normalized == "" {
+		hash := sha256.Sum256([]byte(input))
+		hashStr := hex.EncodeToString(hash[:])
+		return "tool_" + hashStr[:8]
+	}
+	return normalized
 }
 
 func (p *ModelProvider) GenerateText(ctx context.Context, req *estellm.GenerateTextRequest, w estellm.ResponseWriter) error {
@@ -171,7 +192,7 @@ func (p *ModelProvider) GenerateText(ctx context.Context, req *estellm.GenerateT
 			openaiTool := openai.Tool{
 				Type: openai.ToolTypeFunction,
 				Function: &openai.FunctionDefinition{
-					Name:        tool.Name(),
+					Name:        NormalizeToolName(tool.Name()),
 					Description: tool.Description(),
 					Parameters:  tool.InputSchema(),
 				},
@@ -364,7 +385,7 @@ func toolCall(ctx context.Context, tools estellm.ToolSet, toolUseID string, tool
 		return newToolResultWithError(toolUseID, fmt.Errorf("unmarshal input: %w", err)), nil
 	}
 	for _, tool := range tools {
-		if tool.Name() == toolName {
+		if NormalizeToolName(tool.Name()) == toolName {
 			w := estellm.NewBatchResponseWriter()
 			ctx = estellm.WithToolName(ctx, toolName)
 			ctx = estellm.WithToolUseID(ctx, toolUseID)

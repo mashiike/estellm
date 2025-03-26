@@ -14,6 +14,7 @@ import (
 	"text/template"
 
 	"github.com/google/go-jsonnet"
+	"github.com/mashiike/estellm/jsonutil"
 	aliasimporter "github.com/mashiike/go-jsonnet-alias-importer"
 )
 
@@ -26,7 +27,7 @@ type Loader struct {
 	tmpl            *template.Template
 	prepareTemplate func() (*template.Template, error)
 	patterns        []string
-	gen             ValueGenerator
+	gen             jsonutil.ValueGenerator
 	reg             *Registry
 }
 
@@ -35,7 +36,7 @@ func NewLoader() *Loader {
 	l := &Loader{
 		importer:        aliasimporter.New(),
 		tmpl:            tmpl,
-		gen:             defaultSchemaValueGenerator,
+		gen:             jsonutil.DefaultSchemaValueGenerator,
 		patterns:        []string{"*.md", "*.mdx"},
 		extCodes:        make(map[string]string),
 		extVars:         make(map[string]string),
@@ -47,7 +48,7 @@ func NewLoader() *Loader {
 }
 
 func (l *Loader) makeVM() *jsonnet.VM {
-	vm := makeVM()
+	vm := jsonutil.MakeVM()
 	for k, v := range l.extVars {
 		vm.ExtVar(k, v)
 	}
@@ -94,7 +95,7 @@ func (l *Loader) TemplateFuncs(fmap template.FuncMap) {
 	l.resetPrepare()
 }
 
-func (l *Loader) ValueGenerator(gen ValueGenerator) {
+func (l *Loader) ValueGenerator(gen jsonutil.ValueGenerator) {
 	l.gen = gen
 }
 

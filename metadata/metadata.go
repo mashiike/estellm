@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -22,6 +24,25 @@ func (m Metadata) Del(key string) {
 func (m Metadata) Has(key string) bool {
 	_, ok := m[textproto.CanonicalMIMEHeaderKey(key)]
 	return ok
+}
+
+func (m Metadata) Set(key string, value any) {
+	switch v := value.(type) {
+	case string:
+		m.SetString(key, v)
+	case int64:
+		m.SetInt64(key, v)
+	case float64:
+		m.SetFloat64(key, v)
+	case bool:
+		m.SetBool(key, v)
+	case []string:
+		m.SetStrings(key, v)
+	case []byte:
+		m.SetBytes(key, v)
+	default:
+		slog.Warn("unsupported value type", "type", fmt.Sprintf("%T", value))
+	}
 }
 
 func (m Metadata) Keys() []string {

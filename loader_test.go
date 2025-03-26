@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mashiike/estellm"
+	"github.com/mashiike/estellm/jsonutil"
 	"github.com/sebdah/goldie/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ func TestLoader(t *testing.T) {
 	loader := estellm.NewLoader()
 	loader.Includes(os.DirFS("testdata/loadertest/includes"))
 	seed := [32]byte{0}
-	gen := estellm.NewSchemaValueGenerator(rand.New(rand.NewChaCha8(seed)))
+	gen := jsonutil.NewSchemaValueGenerator(rand.New(rand.NewChaCha8(seed)))
 	loader.ValueGenerator(gen)
 	ctx := context.Background()
 

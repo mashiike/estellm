@@ -11,6 +11,10 @@
     "role": "assistant",
     "parts": [
       {
+        "type": "reasoning",
+        "text": "call external tool\n"
+      },
+      {
         "type": "text",
         "text": "execute end \n"
       }

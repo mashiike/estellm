@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
+	"strings"
 	"text/template"
 )
 
@@ -208,4 +210,21 @@ func isSameSignature(fn1, fn2 interface{}) bool {
 	t2 := reflect.TypeOf(fn2)
 
 	return t1 != nil && t2 != nil && t1.Kind() == reflect.Func && t1 == t2
+}
+
+func wildcardMatchs(pattern string, strs []string) ([]string, error) {
+	regexPattern := "^" + regexp.QuoteMeta(pattern) + "$"
+	regexPattern = strings.ReplaceAll(regexPattern, `\*`, ".*")
+
+	re, err := regexp.Compile(regexPattern)
+	if err != nil {
+		return nil, err
+	}
+	matched := make([]string, 0, len(strs))
+	for _, str := range strs {
+		if re.MatchString(str) {
+			matched = append(matched, str)
+		}
+	}
+	return matched, nil
 }

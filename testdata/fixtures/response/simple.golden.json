@@ -12,7 +12,7 @@
     "parts": [
       {
         "type": "reasoning",
-        "text": "call weather tool on remote"
+        "text": "call weather tool on remote\ncall external tool\n"
       },
       {
         "type": "text",

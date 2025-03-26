@@ -101,12 +101,12 @@ $ estellm --help
 Usage: estellm <command> [flags]
 
 Estellm is a tool for llm agents flow control.
-
 Flags:
   -h, --help                      Show context-sensitive help.
       --log-format="json"         Log format ($LOG_FORMAT)
       --[no-]color                Enable color output
       --debug                     Enable debug mode ($DEBUG)
+      --mcp-config=""             MCP server configuration file path ($MCP_CONFIG)
       --ext-var=KEY=VALUE;...     External variables external string values for Jsonnet ($EXT_VAR)
       --ext-code=KEY=VALUE;...    External code external string values for Jsonnet ($EXT_CODE)
       --project="./"              Project directory ($ESTELLM_PROJECT)
@@ -122,6 +122,9 @@ Commands:
 
   docs [flags]
     Show agents documentation
+
+  serve --transport="stdio" [flags]
+    Serve agents as MCP(Model Context Protocol) server
 
   version [flags]
     Show version
@@ -364,6 +367,70 @@ Sunny
 {{- end -}}
 ```
 
+## Usage as MCP(Model Context Protocol) Server
+
+`estellm` can be used as an MCP server.
+The MCP server documentation is available [here](https://modelcontextprotocol.io/introduction)
+
+for example, you can start the server as follows.
+
+```sh
+$ estellm --project _example/mcp serve
+```
+
+if `publish` config in prompt is true, the prompt is registered in the MCP server.
+
+following is an example of publish as `prompts` capability
+
+```md
+{{ define "config" }}
+local env = std.native('env');
+{
+    type: "constant",
+    description: "This prompt is used to get the weather information.",
+    publish: true,
+    publish_types: ["prompt"],
+    arguments: [
+        {
+            name: "location",
+            description: "The name of the location to fetch the weather for",
+            required: true,
+        },
+    ],
+}
+{{ end }}
+// ...
+```
+
+if `publish_types` includes `prompt`, required `arguments` parameters and not specified `payload_schema`.
+
+following is an example of publish as `tool` capability
+
+
+```md
+{{ define "config" }}
+local env = std.native('env');
+{
+    type: "constant",
+    description: "This prompt is used to get the weather information.",
+    publish: true,
+    publish_types: ["tool"],
+    payload_schema: {
+        type: "object",
+        properties: {
+            location: { 
+                type: "string",
+                example: "Tokyo",
+                description: "The name of the location to fetch the weather for",
+            },
+        },
+        required: ["location"],
+    },
+}
+{{ end }}
+// ...
+```
+
 
 ## Usage (as a library)
 
@@ -423,6 +490,64 @@ type MyModelProvider struct {
 
 estellm.RegisterModelProvider("mymodelprovider", &MyModelProvider{})
 ```
+
+## Server as MCP Server 
+
+claude_desktop_config.json
+```json
+{
+  "mcpServers": {
+    "estellm": {
+      "command": "estellm",
+      "args": [
+         "--project",
+         "<your project directory>",
+         "serve"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "<your openai api key>"
+      }
+    }
+  }
+}
+```
+
+estellm server workflow as mcp Server tool capability
+
+## Use MCP Server as a tool 
+
+example dir [_example/mcp](./_example/mcp)
+
+```md
+{{ define "config" }}
+{
+    type: "generate_text",
+    //...
+    tools:["*@filesystem"], 
+}
+{{ end }}
+
+...
+```
+
+mcp.jsonnet
+```jsonnet
+local projectRoot = std.extVar('projectRoot');
+{
+  mcpServers:{
+    "filesystem": {
+      command: "npx",
+      args: [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        projectRoot+"/docs"
+      ],
+    },
+  },
+}
+```
+
+
 
 ## Remote Tool
 

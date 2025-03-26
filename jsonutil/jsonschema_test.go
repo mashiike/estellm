@@ -1,18 +1,18 @@
-package estellm_test
+package jsonutil_test
 
 import (
 	"encoding/json"
 	"math/rand/v2"
 	"testing"
 
-	"github.com/mashiike/estellm"
+	"github.com/mashiike/estellm/jsonutil"
 	"github.com/sebdah/goldie/v2"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSchemaValueGenerator(t *testing.T) {
 	seed := [32]byte{0}
-	gen := estellm.NewSchemaValueGenerator(rand.New(rand.NewChaCha8(seed)))
+	gen := jsonutil.NewSchemaValueGenerator(rand.New(rand.NewChaCha8(seed)))
 	schema := `{
 		"type": "object",
 		"properties": {
