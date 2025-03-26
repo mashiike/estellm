@@ -100,8 +100,7 @@ The command help is as follows.
 $ estellm --help
 Usage: estellm <command> [flags]
 
-Estellm is a tool for llm agetnts flow control.
-
+Estellm is a tool for llm agents flow control.
 Flags:
   -h, --help                      Show context-sensitive help.
       --log-format="json"         Log format ($LOG_FORMAT)
