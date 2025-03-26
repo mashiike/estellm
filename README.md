@@ -107,6 +107,7 @@ Flags:
       --log-format="json"         Log format ($LOG_FORMAT)
       --[no-]color                Enable color output
       --debug                     Enable debug mode ($DEBUG)
+      --mcp-config=""             MCP server configuration file path ($MCP_CONFIG)
       --ext-var=KEY=VALUE;...     External variables external string values for Jsonnet ($EXT_VAR)
       --ext-code=KEY=VALUE;...    External code external string values for Jsonnet ($EXT_CODE)
       --project="./"              Project directory ($ESTELLM_PROJECT)
@@ -490,6 +491,64 @@ type MyModelProvider struct {
 
 estellm.RegisterModelProvider("mymodelprovider", &MyModelProvider{})
 ```
+
+## Server as MCP Server 
+
+claude_desktop_config.json
+```json
+{
+  "mcpServers": {
+    "estellm": {
+      "command": "estellm",
+      "args": [
+         "--project",
+         "<your project directory>",
+         "serve"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "<your openai api key>"
+      }
+    }
+  }
+}
+```
+
+estellm server workflow as mcp Server tool capability
+
+## Use MCP Server as a tool 
+
+example dir [_example/mcp](./_example/mcp)
+
+```md
+{{ define "config" }}
+{
+    type: "generate_text",
+    //...
+    tools:["*@filesystem"], 
+}
+{{ end }}
+
+...
+```
+
+mcp.jsonnet
+```jsonnet
+local projectRoot = std.extVar('projectRoot');
+{
+  mcpServers:{
+    "filesystem": {
+      command: "npx",
+      args: [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        projectRoot+"/docs"
+      ],
+    },
+  },
+}
+```
+
+
 
 ## Remote Tool
 
