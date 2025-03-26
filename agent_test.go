@@ -122,12 +122,19 @@ func TestNewAgentMux__Execute(t *testing.T) {
 		goldie.WithFixtureDir("testdata/fixtures/response"),
 		goldie.WithNameSuffix(".golden.json"),
 	)
+	exTool, err := estellm.NewTool("external_tool", "this is external tool", func(_ context.Context, _ weatherInput, w estellm.ResponseWriter) error {
+		w.WritePart(estellm.ReasoningPart("call external tool\n"))
+		w.WritePart(estellm.TextPart("sunny"))
+		w.Finish(estellm.FinishReasonEndTurn, "finish")
+		return nil
+	})
+	require.NoError(t, err)
 	server := startRemoteToolServer(
 		t,
 		"weather",
 		"return weather",
 		func(ctx context.Context, input searchInput, w estellm.ResponseWriter) error {
-			w.WritePart(estellm.ReasoningPart("call weather tool on remote"))
+			w.WritePart(estellm.ReasoningPart("call weather tool on remote\n"))
 			w.WritePart(estellm.TextPart("sunny"))
 			w.Finish(estellm.FinishReasonEndTurn, "finish")
 			return nil
@@ -213,6 +220,7 @@ func TestNewAgentMux__Execute(t *testing.T) {
 				estellm.WithRegistry(reg),
 				estellm.WithIncludesFS(os.DirFS(c.includes)),
 				estellm.WithPromptsFS(os.DirFS(c.prompts)),
+				estellm.WithExternalTools(exTool),
 			)
 			require.NoError(t, err)
 			mux.Use(c.middleware...)

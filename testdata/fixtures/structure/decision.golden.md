@@ -6,6 +6,7 @@ flowchart TD
     A3[task_a2]
     A4[task_b1]
     A5[task_b2]
+    C0[(external_tool)]
     A0 --> A2
     A0 --> A4
     A2 --> A3

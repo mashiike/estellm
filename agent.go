@@ -37,6 +37,7 @@ type AgentMux struct {
 	remoteTools       map[string]*RemoteTool
 	remoteToolConfigs map[string]RemoteToolConfig
 	remoteToolMu      sync.Mutex
+	externalTools     map[string]Tool
 	isCycle           bool
 	validate          func() error
 	logger            *slog.Logger
@@ -54,6 +55,7 @@ type newAgentMuxOptions struct {
 	templateFuncs       template.FuncMap
 	logger              *slog.Logger
 	baseRmoteToolConfig RemoteToolConfig
+	externalTools       map[string]Tool
 }
 
 type NewAgentMuxOption func(*newAgentMuxOptions)
@@ -118,6 +120,14 @@ func WithRemoteToolConfig(cfg RemoteToolConfig) NewAgentMuxOption {
 	}
 }
 
+func WithExternalTools(tools ...Tool) NewAgentMuxOption {
+	return func(o *newAgentMuxOptions) {
+		for _, tool := range tools {
+			o.externalTools[tool.Name()] = tool
+		}
+	}
+}
+
 func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, error) {
 	o := newAgentMuxOptions{
 		registry:            defaultRegistory,
@@ -129,6 +139,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		templateFuncs:       template.FuncMap{},
 		logger:              slog.Default(),
 		baseRmoteToolConfig: RemoteToolConfig{},
+		externalTools:       make(map[string]Tool),
 	}
 	for _, fn := range optFns {
 		fn(&o)
@@ -144,6 +155,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 	loader.NativeFunctions(o.nativeFunctions...)
 	loader.TemplateFuncs(o.templateFuncs)
 	loader.Registry(reg)
+	loader.ExternalToolNames(slices.Collect(maps.Keys(o.externalTools))...)
 	prompts, dependents, err := loader.LoadFS(ctx, o.promptsFs)
 	if err != nil {
 		return nil, err
@@ -167,6 +179,9 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 				remoteToolConfigs[tool] = remoteToolConfig
 				continue
 			}
+			if _, ok := o.externalTools[tool]; ok {
+				continue
+			}
 			if _, ok := dependents[tool]; !ok {
 				return nil, fmt.Errorf("prompt `%s`: refarence `%s` as tool, but not found", name, tool)
 			}
@@ -185,6 +200,7 @@ func NewAgentMux(ctx context.Context, optFns ...NewAgentMuxOption) (*AgentMux, e
 		dependents:        dependents,
 		logger:            o.logger,
 		toolsDepenedents:  toolsDepenedents,
+		externalTools:     o.externalTools,
 		remoteToolConfigs: remoteToolConfigs,
 		remoteTools:       make(map[string]*RemoteTool),
 		reg:               reg,
@@ -249,6 +265,10 @@ func (mux *AgentMux) ToMarkdown() string {
 		remoteTools[remoteTool] = fmt.Sprintf("Remote Tool %d", remoteToolIndex+1)
 		sb.WriteString(fmt.Sprintf("    %s((Remote Tool %d))\n", nodesAlias[remoteTool], remoteToolIndex+1))
 		remoteToolIndex++
+	}
+	for extenalTool := range mux.externalTools {
+		nodesAlias[extenalTool] = fmt.Sprintf("C%d", remoteToolIndex)
+		sb.WriteString(fmt.Sprintf("    %s[(%s)]\n", nodesAlias[extenalTool], extenalTool))
 	}
 	for _, node := range nodes {
 		deps := mux.dependents[node]
@@ -413,6 +433,10 @@ func (mux *AgentMux) refineRequest(cfg *Config, req *Request) *Request {
 				continue
 			}
 			tools = tools.Append(remoteTool)
+			continue
+		}
+		if externalTool, ok := mux.externalTools[tool]; ok {
+			tools = tools.Append(externalTool)
 			continue
 		}
 		toolPrompt, ok := mux.prompts[tool]

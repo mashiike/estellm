@@ -19,29 +19,31 @@ import (
 )
 
 type Loader struct {
-	importer        *aliasimporter.AliasImpoter
-	includesFS      fs.FS
-	extCodes        map[string]string
-	extVars         map[string]string
-	nativeFunctions map[string]*jsonnet.NativeFunction
-	tmpl            *template.Template
-	prepareTemplate func() (*template.Template, error)
-	patterns        []string
-	gen             jsonutil.ValueGenerator
-	reg             *Registry
+	importer          *aliasimporter.AliasImpoter
+	includesFS        fs.FS
+	extCodes          map[string]string
+	extVars           map[string]string
+	externalToolNames map[string]struct{}
+	nativeFunctions   map[string]*jsonnet.NativeFunction
+	tmpl              *template.Template
+	prepareTemplate   func() (*template.Template, error)
+	patterns          []string
+	gen               jsonutil.ValueGenerator
+	reg               *Registry
 }
 
 func NewLoader() *Loader {
 	tmpl := template.New("prompt")
 	l := &Loader{
-		importer:        aliasimporter.New(),
-		tmpl:            tmpl,
-		gen:             jsonutil.DefaultSchemaValueGenerator,
-		patterns:        []string{"*.md", "*.mdx"},
-		extCodes:        make(map[string]string),
-		extVars:         make(map[string]string),
-		nativeFunctions: make(map[string]*jsonnet.NativeFunction),
-		reg:             defaultRegistory,
+		importer:          aliasimporter.New(),
+		tmpl:              tmpl,
+		gen:               jsonutil.DefaultSchemaValueGenerator,
+		patterns:          []string{"*.md", "*.mdx"},
+		extCodes:          make(map[string]string),
+		extVars:           make(map[string]string),
+		nativeFunctions:   make(map[string]*jsonnet.NativeFunction),
+		externalToolNames: make(map[string]struct{}),
+		reg:               defaultRegistory,
 	}
 	l.resetPrepare()
 	return l
@@ -102,6 +104,12 @@ func (l *Loader) ValueGenerator(gen jsonutil.ValueGenerator) {
 func (l *Loader) PromptPathPatterns(patterns []string) {
 	l.patterns = patterns
 	l.resetPrepare()
+}
+
+func (l *Loader) ExternalToolNames(toolNames ...string) {
+	for _, name := range toolNames {
+		l.externalToolNames[name] = struct{}{}
+	}
 }
 
 func (l *Loader) load(_ context.Context, fsys fs.FS, promptPath string) (*Prompt, error) {
@@ -170,7 +178,9 @@ func (l *Loader) checkDependencies(prompts map[string]*Prompt) (map[string][]str
 		cfg := p.Config()
 		for _, dep := range cfg.DependsOn {
 			if _, ok := prompts[dep]; !ok {
-				return nil, fmt.Errorf("prompt `%s` depends on `%s` but not found", name, dep)
+				if _, ok := l.externalToolNames[dep]; !ok {
+					return nil, fmt.Errorf("prompt `%s` depends on `%s` but not found", name, dep)
+				}
 			}
 			dependents[dep] = append(dependents[dep], name)
 		}
