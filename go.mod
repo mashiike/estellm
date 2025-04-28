@@ -14,7 +14,7 @@ require (
 	github.com/fujiwara/ridge v0.12.1
 	github.com/google/go-jsonnet v0.20.0
 	github.com/invopop/jsonschema v0.13.0
-	github.com/mark3labs/mcp-go v0.17.0
+	github.com/mark3labs/mcp-go v0.23.1
 	github.com/mashiike/go-jsonnet-alias-importer v0.1.0
 	github.com/mashiike/slogutils v0.4.0
 	github.com/sashabaranov/go-openai v1.38.0
